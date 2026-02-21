@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CombatLedger — Live Coaching (Mockup)</title>
+  <style>
+    :root{
+      --bg:#0b0f18; --panel:#11182a; --panel2:#0f1526; --stroke:#22304f;
+      --text:#e8eefc; --muted:#a9b6d6; --accent:#7c5cff; --good:#2bd576; --warn:#ffcc66; --bad:#ff5c77;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:var(--sans); background: radial-gradient(1200px 800px at 20% 10%, rgba(124,92,255,.18), transparent 55%),
+                                                  radial-gradient(1000px 700px at 90% 30%, rgba(43,213,118,.12), transparent 60%),
+                                                  var(--bg);
+      color:var(--text);
+    }
+    a{color:inherit}
+    .app{
+      height:100vh; display:grid; grid-template-columns: 280px 1fr 360px;
+      gap:14px; padding:14px;
+    }
+    .sidebar, .main, .right { border:1px solid var(--stroke); border-radius:16px; background: rgba(17,24,42,.92); box-shadow: var(--shadow); overflow:hidden;}
+    .sidebar{display:flex; flex-direction:column;}
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:14px 14px 10px 14px; border-bottom:1px solid var(--stroke); background: linear-gradient(180deg, rgba(124,92,255,.13), transparent);
+    }
+    .brand{display:flex; gap:10px; align-items:center;}
+    .dot{
+      width:12px;height:12px;border-radius:4px;background:var(--accent);
+      box-shadow: 0 0 0 3px rgba(124,92,255,.18);
+    }
+    .brand h1{font-size:14px; margin:0; letter-spacing:.2px}
+    .pill{
+      font-size:12px; padding:6px 10px; border-radius:999px; border:1px solid var(--stroke);
+      background: rgba(15,21,38,.8); color:var(--muted);
+      display:flex; align-items:center; gap:8px;
+    }
+    .pill .led{width:8px;height:8px;border-radius:99px;background:var(--bad)}
+    .pill.connected .led{background:var(--good)}
+    .pill.connected{color: #d6ffe6; border-color: rgba(43,213,118,.35); background: rgba(43,213,118,.08)}
+    .sidebar .section{padding:12px 14px}
+    .search{
+      width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--stroke); outline:none;
+      background: rgba(11,15,24,.65); color:var(--text);
+    }
+    .nav{display:flex; flex-direction:column; gap:8px; margin-top:12px}
+    .nav button{
+      border:1px solid var(--stroke); background: rgba(15,21,38,.6); color:var(--text);
+      padding:10px 12px; border-radius:12px; text-align:left; cursor:pointer;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .nav button.active{border-color: rgba(124,92,255,.6); background: rgba(124,92,255,.12)}
+    .nav small{color:var(--muted)}
+    .list{
+      padding:0 14px 14px 14px; overflow:auto; flex:1;
+    }
+    .card{
+      border:1px solid var(--stroke); background: rgba(15,21,38,.55); border-radius:14px; padding:12px; margin-bottom:10px;
+    }
+    .card h3{margin:0 0 6px 0; font-size:13px}
+    .meta{display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12px}
+    .badge{font-family:var(--mono); font-size:11px; padding:3px 7px; border-radius:999px; border:1px solid var(--stroke); background: rgba(11,15,24,.5)}
+    .main{display:flex; flex-direction:column;}
+    .mainHeader{
+      padding:14px; border-bottom:1px solid var(--stroke);
+      display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      background: linear-gradient(180deg, rgba(43,213,118,.10), transparent);
+    }
+    .titleBlock{display:flex; flex-direction:column; gap:4px}
+    .titleBlock h2{margin:0; font-size:16px}
+    .titleBlock p{margin:0; color:var(--muted); font-size:12px}
+    .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .btn{
+      border:1px solid var(--stroke); background: rgba(15,21,38,.6); color:var(--text);
+      padding:10px 12px; border-radius:12px; cursor:pointer; font-size:12px;
+      display:flex; gap:8px; align-items:center;
+    }
+    .btn.primary{border-color: rgba(124,92,255,.7); background: rgba(124,92,255,.18)}
+    .btn.good{border-color: rgba(43,213,118,.55); background: rgba(43,213,118,.10)}
+    .btn.warn{border-color: rgba(255,204,102,.55); background: rgba(255,204,102,.10)}
+    .toggle{
+      display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; user-select:none;
+    }
+    .switch{width:44px;height:26px;border-radius:999px;border:1px solid var(--stroke); background: rgba(11,15,24,.6); position:relative; cursor:pointer}
+    .knob{width:20px;height:20px;border-radius:99px; position:absolute; top:2px; left:2px; background: var(--muted); transition: all .18s ease}
+    .switch.on{border-color: rgba(43,213,118,.5); background: rgba(43,213,118,.12)}
+    .switch.on .knob{left:22px; background: var(--good)}
+    .grid{
+      display:grid; grid-template-columns: 1.25fr .75fr; gap:14px; padding:14px; overflow:auto; flex:1;
+    }
+    .panel{
+      border:1px solid var(--stroke); background: rgba(15,21,38,.55); border-radius:16px; overflow:hidden;
+    }
+    .panelHeader{
+      padding:12px 12px 10px 12px; border-bottom:1px solid var(--stroke);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .panelHeader h3{margin:0; font-size:13px}
+    .panelHeader .sub{color:var(--muted); font-size:12px}
+    .panelBody{padding:12px}
+    .now{
+      display:flex; flex-direction:column; gap:10px;
+    }
+    .alert{
+      border:1px solid var(--stroke); background: rgba(11,15,24,.55); border-radius:14px; padding:10px;
+      display:flex; gap:10px; align-items:flex-start;
+    }
+    .sev{
+      width:10px; height:10px; border-radius:99px; margin-top:4px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(124,92,255,.16);
+      flex:0 0 auto;
+    }
+    .sev.good{background: var(--good); box-shadow: 0 0 0 3px rgba(43,213,118,.14)}
+    .sev.warn{background: var(--warn); box-shadow: 0 0 0 3px rgba(255,204,102,.14)}
+    .sev.bad{background: var(--bad); box-shadow: 0 0 0 3px rgba(255,92,119,.14)}
+    .alert h4{margin:0; font-size:13px}
+    .alert p{margin:3px 0 0 0; color:var(--muted); font-size:12px; line-height:1.3}
+    .kvs{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+    .kv{
+      font-size:11px; padding:3px 7px; border-radius:999px; border:1px solid var(--stroke); background: rgba(15,21,38,.6);
+      font-family: var(--mono); color: #d7e3ff;
+    }
+    .timeline{
+      height:160px; border-radius:14px; border:1px solid var(--stroke); background: rgba(11,15,24,.55);
+      overflow:hidden; position:relative;
+    }
+    .tick{
+      position:absolute; bottom:0; width:2px; background: rgba(124,92,255,.65);
+      border-radius:2px; opacity:.85;
+    }
+    .tick.good{background: rgba(43,213,118,.75)}
+    .tick.warn{background: rgba(255,204,102,.75)}
+    .tick.bad{background: rgba(255,92,119,.8)}
+    .tickLabel{
+      position:absolute; top:10px; left:10px; color:var(--muted); font-size:12px;
+    }
+    .sparkRow{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+    .spark{
+      border:1px solid var(--stroke); border-radius:14px; background: rgba(11,15,24,.55);
+      padding:10px;
+    }
+    .spark .big{font-size:18px; font-weight:700}
+    .spark .small{color:var(--muted); font-size:12px}
+    .right{
+      display:flex; flex-direction:column;
+    }
+    .right .section{padding:14px; border-bottom:1px solid var(--stroke)}
+    .right h3{margin:0 0 8px 0; font-size:13px}
+    label{display:block; color:var(--muted); font-size:12px; margin:10px 0 6px}
+    select, input[type="range"], input[type="text"]{
+      width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--stroke);
+      background: rgba(11,15,24,.65); color:var(--text); outline:none;
+    }
+    .twoCol{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+    .mini{
+      font-size:12px; color:var(--muted); line-height:1.45;
+    }
+    .log{
+      padding:12px 14px; overflow:auto; flex:1;
+      font-family: var(--mono); font-size:11px; line-height:1.35; color:#cfe1ff;
+      background: rgba(11,15,24,.35);
+    }
+    .log .line{opacity:.9; padding:6px 0; border-bottom:1px dashed rgba(34,48,79,.55)}
+    .tag{display:inline-block; padding:2px 6px; border-radius:999px; margin-right:8px; border:1px solid rgba(34,48,79,.9);}
+    .tag.good{background: rgba(43,213,118,.10); border-color: rgba(43,213,118,.35)}
+    .tag.warn{background: rgba(255,204,102,.10); border-color: rgba(255,204,102,.35)}
+    .tag.bad{background: rgba(255,92,119,.10); border-color: rgba(255,92,119,.35)}
+    .footerNote{
+      padding:10px 14px; border-top:1px solid var(--stroke); color:var(--muted); font-size:11px;
+    }
+    .kbd{font-family:var(--mono); font-size:11px; padding:2px 6px; border:1px solid var(--stroke); border-radius:8px; background: rgba(15,21,38,.55)}
+    @media (max-width: 1100px){
+      .app{grid-template-columns: 1fr; height:auto}
+      .right{order:3}
+      .sidebar{order:1}
+      .main{order:2}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- LEFT: Sessions / Pulls -->
+    <aside class="sidebar">
+      <div class="topbar">
+        <div class="brand">
+          <div class="dot"></div>
+          <div>
+            <h1>CombatLedger</h1>
+            <div style="font-size:11px;color:var(--muted)">Live coaching mockup</div>
+          </div>
+        </div>
+        <div id="connPill" class="pill"><span class="led"></span><span id="connText">Disconnected</span></div>
+      </div>
+
+      <div class="section">
+        <input class="search" placeholder="Search pulls, spells, mechanics…" />
+        <div class="nav">
+          <button id="navLive" class="active" onclick="setMode('live')">
+            <div>
+              <div style="font-weight:650">Live Coach</div>
+              <small>During pull guidance</small>
+            </div>
+            <span class="badge">NOW</span>
+          </button>
+          <button id="navSummary" onclick="setMode('summary')">
+            <div>
+              <div style="font-weight:650">Pull Summary</div>
+              <small>10s wipe debrief</small>
+            </div>
+            <span class="badge">POST</span>
+          </button>
+          <button id="navLibrary" onclick="setMode('library')">
+            <div>
+              <div style="font-weight:650">Coach Library</div>
+              <small>Rules & priorities</small>
+            </div>
+            <span class="badge">RULES</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="list" id="leftList">
+        <!-- filled by JS -->
+      </div>
+    </aside>
+
+    <!-- CENTER: Main -->
+    <main class="main">
+      <div class="mainHeader">
+        <div class="titleBlock">
+          <h2 id="mainTitle">Live Coach — “Now”</h2>
+          <p id="mainSub">A minimal, prioritized feed: 1–3 things to do <em>right now</em>. Built for Midnight (12.x) constraints.</p>
+        </div>
+        <div class="controls">
+          <div class="toggle">
+            <div id="simSwitch" class="switch" onclick="toggleSim()"><div class="knob"></div></div>
+            <span>Simulate Live Feed</span>
+          </div>
+          <button class="btn primary" onclick="newPull()">New Pull</button>
+          <button class="btn good" onclick="markWipe()">Wipe → Debrief</button>
+          <button class="btn warn" onclick="addTestAlert()">Add Test Alert</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <!-- Left column -->
+        <section class="panel">
+          <div class="panelHeader">
+            <div>
+              <h3>Now (Prioritized)</h3>
+              <div class="sub">High confidence by default; throttled to reduce noise.</div>
+            </div>
+            <div class="badge" id="pullClock">Pull: 00:00</div>
+          </div>
+          <div class="panelBody">
+            <div class="now" id="nowFeed"></div>
+
+            <div style="height:14px"></div>
+
+            <div class="panelHeader" style="border:1px solid var(--stroke); border-radius:14px; margin-top:8px">
+              <div>
+                <h3>Event Timeline (last 30s)</h3>
+                <div class="sub">Visual density: damage taken / cooldowns / mistakes.</div>
+              </div>
+              <div class="badge" id="timelineNote">Streaming</div>
+            </div>
+            <div class="panelBody" style="padding-top:10px">
+              <div class="timeline" id="timeline">
+                <div class="tickLabel">Recent events →</div>
+              </div>
+              <div style="height:10px"></div>
+              <div class="sparkRow">
+                <div class="spark">
+                  <div class="big" id="gcdGap">0.4s</div>
+                  <div class="small">Current GCD gap (target & movement aware)</div>
+                </div>
+                <div class="spark">
+                  <div class="big" id="avoidable">0</div>
+                  <div class="small">Avoidable hits this pull (high confidence)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right column -->
+        <section class="panel">
+          <div class="panelHeader">
+            <div>
+              <h3>Focus & Policy</h3>
+              <div class="sub">Who we coach + how aggressive we are.</div>
+            </div>
+            <div class="badge" id="confidenceMode">Confidence: High</div>
+          </div>
+          <div class="panelBody">
+            <label>Player Focus</label>
+            <select id="playerSelect" onchange="setPlayer()">
+              <option>Stonebraid (Paladin)</option>
+              <option>Healz4Dayz (Priest)</option>
+              <option>Bladestormy (Warrior)</option>
+              <option>Tankasaurus (Druid)</option>
+            </select>
+
+            <div class="twoCol">
+              <div>
+                <label>Spec Profile</label>
+                <select id="specSelect" onchange="setSpec()">
+                  <option>Retribution — Burst Windows</option>
+                  <option>Holy — Throughput & CDs</option>
+                  <option>Protection — Mitigation</option>
+                </select>
+              </div>
+              <div>
+                <label>Output</label>
+                <select id="outSelect" onchange="setOutput()">
+                  <option>Overlay (in-game)</option>
+                  <option>Second screen</option>
+                  <option>Audio only</option>
+                </select>
+              </div>
+            </div>
+
+            <label>Coaching Intensity</label>
+            <input id="intensity" type="range" min="1" max="5" value="3" oninput="setIntensity()" />
+            <div class="mini" id="intensityLabel" style="margin-top:6px">Balanced: only call outs with clear value.</div>
+
+            <label>Safeguards</label>
+            <div class="mini">
+              <div>• Never claim “you had X available” unless derived from observed casts.</div>
+              <div>• Anything that depends on secret/locked APIs becomes <span class="kbd">post-pull</span>.</div>
+              <div>• Dedup + cooldown per advice key (anti-spam).</div>
+            </div>
+
+            <div style="height:12px"></div>
+            <button class="btn" style="width:100%" onclick="openLibrary()">Open Coach Library</button>
+          </div>
+
+          <div class="panelHeader">
+            <div>
+              <h3>Live Feed (debug)</h3>
+              <div class="sub">What your parser sees after filtering.</div>
+            </div>
+            <div class="badge" id="eps">0.0 eps</div>
+          </div>
+          <div class="log" id="log"></div>
+          <div class="footerNote">
+            Tip: In production, the Companion tails <span class="kbd">WoWCombatLog.txt</span> and the addon only does identity/handshake.
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- RIGHT: Settings / Build status -->
+    <aside class="right">
+      <div class="section">
+        <h3>Connection</h3>
+        <div class="mini">
+          <div><span class="badge">IPC</span> Addon handshake: <span id="handshake">OFF</span></div>
+          <div style="margin-top:6px"><span class="badge">LOG</span> CombatLog tailing: <span id="tailing">OFF</span></div>
+        </div>
+        <div style="height:10px"></div>
+        <button class="btn primary" style="width:100%" onclick="toggleConnect()">Toggle “Connected”</button>
+      </div>
+
+      <div class="section">
+        <h3>Pull Controls</h3>
+        <div class="mini">
+          <div>Encounter: <span class="badge" id="encounter">Training Dummy</span></div>
+          <div style="margin-top:6px">Phase: <span class="badge" id="phase">P1</span></div>
+          <div style="margin-top:6px">Goal: <span class="badge">Reduce avoidable</span> <span class="badge">Align CDs</span></div>
+        </div>
+        <div style="height:10px"></div>
+        <div class="twoCol">
+          <button class="btn" onclick="phaseUp()">Phase +</button>
+          <button class="btn" onclick="phaseDown()">Phase -</button>
+        </div>
+      </div>
+
+      <div class="section" style="border-bottom:none">
+        <h3>What’s “interactive” here?</h3>
+        <div class="mini">
+          <div>• Toggle <b>Simulate Live Feed</b> to see events and coaching update.</div>
+          <div>• Hit <b>Wipe → Debrief</b> to switch to post-pull summary mode.</div>
+          <div>• Change <b>Player / Spec / Intensity</b> to see policy + advice change.</div>
+          <div style="margin-top:8px; opacity:.85">This is a concept UI — not a claim about in-game addon capabilities.</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+  // ------- Mock data & helpers -------
+  const leftList = document.getElementById('leftList');
+  const nowFeed = document.getElementById('nowFeed');
+  const logEl = document.getElementById('log');
+  const timelineEl = document.getElementById('timeline');
+  const pullClockEl = document.getElementById('pullClock');
+  const epsEl = document.getElementById('eps');
+  const gcdGapEl = document.getElementById('gcdGap');
+  const avoidableEl = document.getElementById('avoidable');
+  const connPill = document.getElementById('connPill');
+  const connText = document.getElementById('connText');
+  const handshakeEl = document.getElementById('handshake');
+  const tailingEl = document.getElementById('tailing');
+  const encounterEl = document.getElementById('encounter');
+  const phaseEl = document.getElementById('phase');
+  const timelineNote = document.getElementById('timelineNote');
+  const confidenceMode = document.getElementById('confidenceMode');
+
+  const navLive = document.getElementById('navLive');
+  const navSummary = document.getElementById('navSummary');
+  const navLibrary = document.getElementById('navLibrary');
+  const mainTitle = document.getElementById('mainTitle');
+  const mainSub = document.getElementById('mainSub');
+
+  let connected = false;
+  let sim = false;
+  let mode = 'live';
+  let pullStart = Date.now();
+  let phase = 1;
+  let epsWindow = [];
+  let avoidableCount = 0;
+  let adviceCooldowns = {}; // key -> lastTs
+  let intensity = 3;
+
+  const players = [
+    {name:'Stonebraid', spec:'Ret'},
+    {name:'Healz4Dayz', spec:'Holy Priest'},
+    {name:'Bladestormy', spec:'Arms'},
+    {name:'Tankasaurus', spec:'Guardian'}
+  ];
+  let focusPlayer = players[0];
+
+  const RULES = [
+    {
+      key:'cd_drift',
+      title:'Align major cooldown with pull/burst',
+      sev:'warn',
+      explain:'Observed drift: major cooldown used late vs opener plan.',
+      kv:(ctx)=>['drift='+ctx.drift.toFixed(1)+'s','window=pull+0'],
+      when:(e,ctx)=> e.type==='CD_USED' && ctx.drift>8 && ctx.conf==='high',
+      message:(ctx)=>`Your major CD drifted by ~${ctx.drift.toFixed(0)}s. Next pull: use on pull, then on CD.`
+    },
+    {
+      key:'avoidable_repeat',
+      title:'Avoidable damage repeating',
+      sev:'bad',
+      explain:'You’re getting hit by a known avoidable mechanic multiple times.',
+      kv:(ctx)=>['hits='+ctx.hits,'spell='+ctx.spell],
+      when:(e,ctx)=> e.type==='AVOIDABLE_HIT' && ctx.hits>=2,
+      message:(ctx)=>`${ctx.spell}: ${ctx.hits} hits this pull. Adjust position/route before next overlap.`
+    },
+    {
+      key:'gcd_gap',
+      title:'Large GCD gap after mechanic',
+      sev:'warn',
+      explain:'Long gaps often mean lost uptime. Plan a mobile filler.',
+      kv:(ctx)=>['gap='+ctx.gap.toFixed(1)+'s','phase=P'+phase],
+      when:(e,ctx)=> e.type==='GCD_GAP' && ctx.gap>=2.5 && (intensity>=3),
+      message:(ctx)=>`You had a ${ctx.gap.toFixed(1)}s gap. Consider pre-positioning + a mobile filler.`
+    },
+    {
+      key:'interrupt_miss',
+      title:'Interrupt opportunity missed',
+      sev:'warn',
+      explain:'Cast completed with no interrupt from you (confidence varies).',
+      kv:(ctx)=>['spell='+ctx.spell,'conf='+ctx.conf],
+      when:(e,ctx)=> e.type==='KICK_MISS' && (intensity>=4 || ctx.conf==='high'),
+      message:(ctx)=>`Missed kick on ${ctx.spell} (${ctx.conf} confidence). Re-check assignment / range.`
+    },
+    {
+      key:'good_play',
+      title:'Nice — clean defensive timing',
+      sev:'good',
+      explain:'Reinforce the behavior you want to repeat.',
+      kv:(ctx)=>['timing='+ctx.timing,'phase=P'+phase],
+      when:(e,ctx)=> e.type==='DEF_GOOD' && intensity<=4,
+      message:(ctx)=>`Good defensive timing (${ctx.timing}). Keep that cadence for the next burst.`
+    },
+  ];
+
+  function fmtTime(ms){
+    const s = Math.max(0, Math.floor(ms/1000));
+    const m = Math.floor(s/60);
+    const r = s%60;
+    return String(m).padStart(2,'0')+':'+String(r).padStart(2,'0');
+  }
+
+  function addLogLine(tag, text){
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.innerHTML = `<span class="tag ${tag}">${tag.toUpperCase()}</span>${text}`;
+    logEl.prepend(div);
+    // cap
+    while(logEl.children.length>60) logEl.removeChild(logEl.lastChild);
+  }
+
+  function addAdvice(rule, ctx){
+    const now = Date.now();
+    const last = adviceCooldowns[rule.key] || 0;
+    const cdMs = (rule.sev==='bad'? 8000 : 12000); // anti-spam
+    if(now - last < cdMs) return;
+    adviceCooldowns[rule.key] = now;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'alert';
+    const sevClass = rule.sev==='bad' ? 'bad' : (rule.sev==='warn' ? 'warn' : 'good');
+
+    const kvs = (rule.kv ? rule.kv(ctx) : []).map(k=>`<span class="kv">${k}</span>`).join('');
+    wrapper.innerHTML = `
+      <div class="sev ${sevClass}"></div>
+      <div>
+        <h4>${rule.title}</h4>
+        <p>${rule.message(ctx)}</p>
+        <div class="kvs">${kvs}</div>
+      </div>
+    `;
+    nowFeed.prepend(wrapper);
+    while(nowFeed.children.length>3) nowFeed.removeChild(nowFeed.lastChild);
+
+    addLogLine(sevClass==='good'?'good':(sevClass==='warn'?'warn':'bad'),
+      `[coach] ${rule.key} → ${rule.message(ctx)}`
+    );
+  }
+
+  function addTimelineTick(sev){
+    const tick = document.createElement('div');
+    tick.className = 'tick ' + sev;
+    const w = timelineEl.clientWidth || 400;
+    const x = Math.random() * (w-6) + 3;
+    const h = 20 + Math.random()*110;
+    tick.style.left = x+'px';
+    tick.style.height = h+'px';
+    timelineEl.appendChild(tick);
+    // remove older ticks
+    while(timelineEl.children.length>65) timelineEl.removeChild(timelineEl.children[1]); // keep label
+  }
+
+  function updateLeftList(){
+    leftList.innerHTML = '';
+    const sessions = [
+      {title:'Tonight — Mythic prog', meta:['8 pulls','2 wipes','goal: reduce avoidable']},
+      {title:'Practice — dummy burst', meta:['12 mins','CD alignment']},
+      {title:'Last night — keys', meta:['M+','interrupt coverage']}
+    ];
+    sessions.forEach((s,i)=>{
+      const c = document.createElement('div');
+      c.className = 'card';
+      c.innerHTML = `<h3>${s.title}</h3><div class="meta">${s.meta.map(m=>`<span class="badge">${m}</span>`).join('')}</div>`;
+      leftList.appendChild(c);
+    });
+
+    if(mode==='library'){
+      const lib = document.createElement('div');
+      lib.className='card';
+      lib.innerHTML = `<h3>Active rules</h3><div class="meta">${RULES.map(r=>`<span class="badge">${r.key}</span>`).join('')}</div>`;
+      leftList.prepend(lib);
+    }
+    if(mode==='summary'){
+      const sum = document.createElement('div');
+      sum.className='card';
+      sum.innerHTML = `<h3>Last wipe</h3>
+        <div class="meta">
+          <span class="badge">avoidable=${avoidableCount}</span>
+          <span class="badge">phase=P${phase}</span>
+          <span class="badge">top issue=positioning</span>
+        </div>
+        <div style="margin-top:8px;color:var(--muted);font-size:12px;line-height:1.35">
+          Next pull focus: (1) stop eating ${avoidableCount>0?'avoidable': 'overlap'} hits, (2) align major CD with opener.
+        </div>`;
+      leftList.prepend(sum);
+    }
+  }
+
+  function setMode(m){
+    mode = m;
+    navLive.classList.toggle('active', m==='live');
+    navSummary.classList.toggle('active', m==='summary');
+    navLibrary.classList.toggle('active', m==='library');
+
+    if(m==='live'){
+      mainTitle.textContent = 'Live Coach — “Now”';
+      mainSub.innerHTML = 'A minimal, prioritized feed: 1–3 things to do <em>right now</em>. Built for Midnight (12.x) constraints.';
+      timelineNote.textContent = sim ? 'Simulated' : 'Streaming';
+    }else if(m==='summary'){
+      mainTitle.textContent = 'Pull Summary — 10s Debrief';
+      mainSub.textContent = 'After wipe/kill: immediate, actionable recap (no deep parsing required).';
+      timelineNote.textContent = 'Recap';
+    }else{
+      mainTitle.textContent = 'Coach Library — Rules & Priorities';
+      mainSub.textContent = 'Tune what the coach is allowed to say, and how confident it must be.';
+      timelineNote.textContent = 'Rules';
+    }
+    updateLeftList();
+  }
+
+  function setIntensity(){
+    intensity = parseInt(document.getElementById('intensity').value,10);
+    const label = document.getElementById('intensityLabel');
+    const map = {
+      1:'Quiet: only critical mistakes.',
+      2:'Low: major mistakes and big wins.',
+      3:'Balanced: only call outs with clear value.',
+      4:'High: include interrupt windows + uptime gaps.',
+      5:'Maximum: aggressive coaching, more frequent.'
+    };
+    label.textContent = map[intensity] || map[3];
+  }
+
+  function setPlayer(){
+    const v = document.getElementById('playerSelect').value;
+    focusPlayer = players.find(p=>v.startsWith(p.name)) || players[0];
+    addLogLine('good', `[ui] focus → ${focusPlayer.name}`);
+  }
+
+  function setSpec(){
+    const v = document.getElementById('specSelect').value;
+    addLogLine('good', `[ui] spec profile → ${v}`);
+  }
+
+  function setOutput(){
+    const v = document.getElementById('outSelect').value;
+    addLogLine('good', `[ui] output → ${v}`);
+  }
+
+  function toggleConnect(){
+    connected = !connected;
+    connPill.classList.toggle('connected', connected);
+    connText.textContent = connected ? 'Connected' : 'Disconnected';
+    handshakeEl.textContent = connected ? 'ON' : 'OFF';
+    tailingEl.textContent = connected ? 'ON' : 'OFF';
+    addLogLine(connected?'good':'warn', `[system] ${connected?'connected (handshake + tailing)':'disconnected'}`);
+  }
+
+  function toggleSim(){
+    sim = !sim;
+    document.getElementById('simSwitch').classList.toggle('on', sim);
+    timelineNote.textContent = sim ? 'Simulated' : 'Streaming';
+    addLogLine(sim?'good':'warn', `[system] simulate live feed = ${sim}`);
+  }
+
+  function phaseUp(){ phase = Math.min(4, phase+1); phaseEl.textContent = 'P'+phase; }
+  function phaseDown(){ phase = Math.max(1, phase-1); phaseEl.textContent = 'P'+phase; }
+
+  function newPull(){
+    pullStart = Date.now();
+    avoidableCount = 0;
+    adviceCooldowns = {};
+    nowFeed.innerHTML = '';
+    timelineEl.querySelectorAll('.tick').forEach(t=>t.remove());
+    addLogLine('good', `[pull] started (phase P${phase})`);
+    // seed with a positive instruction
+    addAdvice({key:'seed', title:'Plan for this pull', sev:'good', message:()=>`Focus: (1) avoidable hits, (2) major CD on pull, (3) keep GCD gaps < 1.5s`, kv:()=>['policy=balanced','conf=high']},
+      {conf:'high'}
+    );
+  }
+
+  function markWipe(){
+    addLogLine('bad', `[pull] wipe detected → generating debrief`);
+    setMode('summary');
+    // show a recap advice in now feed
+    nowFeed.innerHTML = '';
+    addAdvice({key:'debrief', title:'Debrief (10s)', sev:'warn',
+      message:()=>`Top issue: ${avoidableCount>0 ? 'avoidable damage' : 'uptime gaps'}. Next pull: fix that first.`,
+      kv:()=>[`avoidable=${avoidableCount}`,`phase=P${phase}`,`conf=high`]}, {conf:'high'}
+    );
+  }
+
+  function openLibrary(){
+    setMode('library');
+    // render rules as "advice" cards
+    nowFeed.innerHTML='';
+    RULES.slice(0,3).forEach(r=>{
+      const ctx = {drift:10.2,hits:2,spell:'[Mechanic]',gap:2.9,conf:'high',timing:'pre-hit'};
+      addAdvice(r, ctx);
+    });
+  }
+
+  function addTestAlert(){
+    const samples = [
+      {type:'AVOIDABLE_HIT', spell:'Shadow Surge', sev:'bad', conf:'high'},
+      {type:'GCD_GAP', gap: 2.7, sev:'warn', conf:'high'},
+      {type:'DEF_GOOD', timing:'0.4s before burst', sev:'good', conf:'high'},
+      {type:'KICK_MISS', spell:'Void Bolt', sev:'warn', conf: (Math.random()<.5?'high':'medium')},
+      {type:'CD_USED', drift: 9 + Math.random()*8, sev:'warn', conf:'high'}
+    ];
+    ingest(samples[Math.floor(Math.random()*samples.length)]);
+  }
+
+  // ------- Stream simulation -------
+  function ingest(event){
+    // update simple state
+    epsWindow.push(Date.now());
+    const cutoff = Date.now() - 1000;
+    epsWindow = epsWindow.filter(t=>t>cutoff);
+    epsEl.textContent = epsWindow.length.toFixed(1) + ' eps';
+
+    // Update widgets
+    const gap = (Math.random()*1.2) + (event.type==='GCD_GAP'? event.gap : 0.2);
+    gcdGapEl.textContent = gap.toFixed(1)+'s';
+    if(event.type==='AVOIDABLE_HIT'){ avoidableCount++; avoidableEl.textContent = String(avoidableCount); }
+
+    // timeline
+    const sev = event.sev || 'warn';
+    addTimelineTick(sev);
+
+    // log
+    addLogLine(sev, `[event] ${event.type} ${event.spell?('spell='+event.spell):''} ${event.gap?('gap='+event.gap.toFixed(1)) : ''} ${event.drift?('drift='+event.drift.toFixed(1)) : ''}`);
+
+    // rules
+    const ctx = {
+      drift: event.drift || 0,
+      hits: avoidableCount,
+      spell: event.spell || 'Unknown',
+      gap: event.gap || gap,
+      conf: event.conf || 'high',
+      timing: event.timing || 'good',
+    };
+    for(const rule of RULES){
+      if(rule.when(event, ctx)){
+        addAdvice(rule, ctx);
+      }
+    }
+  }
+
+  let timer = null;
+  function tick(){
+    const elapsed = Date.now() - pullStart;
+    pullClockEl.textContent = 'Pull: ' + fmtTime(elapsed);
+    if(sim){
+      // generate 0-2 events
+      const n = Math.random() < .65 ? 1 : (Math.random()<.2 ? 2 : 0);
+      for(let i=0;i<n;i++){
+        const r = Math.random();
+        if(r < .18) ingest({type:'AVOIDABLE_HIT', spell: (phase>=3?'Twilight Nova':'Shadow Surge'), sev:'bad', conf:'high'});
+        else if(r < .38) ingest({type:'GCD_GAP', gap: 2.4 + Math.random()*1.8, sev:'warn', conf:'high'});
+        else if(r < .55) ingest({type:'CD_USED', drift: 7 + Math.random()*12, sev:'warn', conf:'high'});
+        else if(r < .70) ingest({type:'KICK_MISS', spell: 'Void Bolt', sev:'warn', conf: (Math.random()<.55?'high':'medium')});
+        else ingest({type:'DEF_GOOD', timing:'~0.6s pre-hit', sev:'good', conf:'high'});
+      }
+    }
+    timer = window.requestAnimationFrame(tick);
+  }
+
+  // init
+  function init(){
+    setIntensity();
+    updateLeftList();
+    newPull();
+    tick();
+    // default connected for nicer demo
+    toggleConnect();
+    document.getElementById('simSwitch').classList.add('on'); sim = true;
+    addLogLine('good', '[system] demo mode enabled');
+  }
+  window.addEventListener('load', init);
+</script>
+</body>
+</html>
