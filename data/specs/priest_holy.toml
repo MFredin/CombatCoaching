@@ -23,6 +23,6 @@ primary_spell_ids = [
     596,    # Prayer of Healing     (AoE)
     139,    # Renew
     2061,   # Flash Heal
-    1healing,  # Holy Word: Sanctify (ground AoE)
+    88625,  # Holy Word: Sanctify (ground AoE)
     34861,  # Circle of Healing    (talented)
 ]

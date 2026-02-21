@@ -1,5 +1,5 @@
 // Entry point for the settings window.
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke }     from "@tauri-apps/api/core";
 import { open }       from "@tauri-apps/plugin-dialog";
@@ -26,9 +26,9 @@ function SettingsApp() {
   const [detectMsg, setDetectMsg]   = useState("");
 
   // Load config on mount
-  useState(() => {
+  useEffect(() => {
     invoke<AppConfig>("get_config").then(setConfig).catch(console.error);
-  });
+  }, []);
 
   useTauriEvents({
     onConnection: useCallback((s: ConnStatus) => setConnStatus(s), []),

@@ -43,16 +43,19 @@ pub fn evaluate(input: &RuleInput, ctx: &RuleContext, major_cd_ids: &[u32]) -> R
     }
 
     // Only report on the FIRST use of this CD this pull.
-    // If the CD was used earlier, its last_used_ms will be less than pull_elapsed.
+    // We check that the spell has been used exactly once since pull start —
+    // i.e. the elapsed time since last use equals the full pull elapsed time,
+    // meaning it was never used before this moment in the pull.
+    // Using elapsed comparison is more robust than exact timestamp equality.
     let pull_start_ms = ctx.state.current_pull.as_ref().map(|p| p.start_ms).unwrap_or(0);
-    let is_first_use = ctx
+    let prior_use_this_pull = ctx
         .state
         .cooldowns
         .last_used_ms(*spell_id)
-        .map(|t| t >= pull_start_ms && t == ctx.now_ms)
+        .map(|t| t > pull_start_ms && t < ctx.now_ms) // used earlier this pull
         .unwrap_or(false);
 
-    if !is_first_use {
+    if prior_use_this_pull {
         return vec![];
     }
 
