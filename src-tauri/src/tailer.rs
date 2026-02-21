@@ -1,11 +1,19 @@
-/// Tails WoWCombatLog.txt, emitting new lines as they are written.
+/// Tails the newest WoWCombatLog*.txt in the configured Logs directory,
+/// emitting new lines as they are written.
 ///
 /// Uses the `notify` crate (OS-level ReadDirectoryChangesWatcher on Windows)
-/// to detect file modifications, then reads from the last known byte offset.
+/// to detect file modifications and creations, then reads from the last known
+/// byte offset.
 ///
-/// Rotation handling: WoW recreates the log file when the player toggles
-/// `/combatlog` or zones. We detect this by comparing the current file size
-/// to our last known position — if the file shrank, we restart from byte 0.
+/// ## Dynamic log switching
+/// WoW creates a new timestamped log file (e.g. `WoWCombatLog_2024_06_15_195432.txt`)
+/// each time the player enables combat logging or zones into a new area.  On
+/// every `EventKind::Create` event the tailer rescans the directory and switches
+/// to the newest `WoWCombatLog*.txt` if it is different from the current file.
+///
+/// ## Rotation handling
+/// If the active file shrinks (WoW rewrote it), the offset resets to 0 and the
+/// file is read from the beginning.
 use anyhow::Result;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs::File;
@@ -15,18 +23,64 @@ use std::sync::mpsc as std_mpsc;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 
-pub struct TailerState {
-    path: PathBuf,
+use crate::config::find_latest_log;
+
+// ---------------------------------------------------------------------------
+// Active-file state
+// ---------------------------------------------------------------------------
+
+struct TailerState {
+    /// The Logs directory being watched.
+    logs_dir: PathBuf,
+    /// The currently active log file (may change when WoW creates a new one).
+    active_file: Option<PathBuf>,
+    /// Byte offset of the next unread byte in `active_file`.
     position: u64,
 }
 
 impl TailerState {
-    fn new(path: PathBuf) -> Self {
-        Self { path, position: 0 }
+    fn new(logs_dir: PathBuf) -> Self {
+        let active_file = find_latest_log(&logs_dir);
+        if let Some(ref f) = active_file {
+            tracing::info!("Tailer: initial log file {:?}", f);
+        } else {
+            tracing::info!("Tailer: no WoWCombatLog*.txt found yet in {:?}", logs_dir);
+        }
+        Self { logs_dir, active_file, position: 0 }
     }
 
+    /// Called on directory Create events.  If a newer WoWCombatLog*.txt has
+    /// appeared, switch to it and reset the byte offset to 0.
+    fn check_for_new_log(&mut self) {
+        let newest = match find_latest_log(&self.logs_dir) {
+            Some(p) => p,
+            None    => return,
+        };
+
+        let is_new = self.active_file.as_deref() != Some(newest.as_path());
+        if is_new {
+            tracing::info!("Tailer: switching to new log file {:?}", newest);
+            self.active_file = Some(newest);
+            self.position    = 0;
+        }
+    }
+
+    /// Read any new lines from the active file since `self.position`.
     fn read_new_lines(&mut self, tx: &Sender<String>) -> Result<()> {
-        let metadata = match std::fs::metadata(&self.path) {
+        let path = match &self.active_file {
+            Some(p) => p.clone(),
+            None => {
+                // No log file yet — try to find one now (WoW may have just
+                // created it between the watcher event and this call).
+                self.check_for_new_log();
+                match &self.active_file {
+                    Some(p) => p.clone(),
+                    None    => return Ok(()),
+                }
+            }
+        };
+
+        let metadata = match std::fs::metadata(&path) {
             Ok(m) => m,
             Err(_) => return Ok(()), // File doesn't exist yet — wait
         };
@@ -42,7 +96,7 @@ impl TailerState {
             return Ok(()); // No new data
         }
 
-        let mut file = File::open(&self.path)?;
+        let mut file = File::open(&path)?;
         file.seek(SeekFrom::Start(self.position))?;
 
         let reader = BufReader::new(&file);
@@ -53,7 +107,7 @@ impl TailerState {
                         return Ok(()); // Receiver gone — pipeline shutting down
                     }
                 }
-                Ok(_) => {}
+                Ok(_)  => {}
                 Err(e) => {
                     tracing::warn!("Tailer read error: {}", e);
                     break;
@@ -61,48 +115,68 @@ impl TailerState {
             }
         }
 
-        // Update position to end of file (not end of last line — handles
-        // partial line writes gracefully; the partial line won't be read
-        // as a full line by BufRead, so we'll re-read it next time).
+        // Update position to end of file (handles partial line writes gracefully;
+        // partial lines won't be returned by BufRead, so we re-read them next time).
         self.position = file_len;
         Ok(())
     }
 }
 
-pub async fn run(wow_log_path: PathBuf, tx: Sender<String>) -> Result<()> {
-    tracing::info!("Tailer starting: {:?}", wow_log_path);
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
 
-    let watch_dir = wow_log_path
-        .parent()
-        .unwrap_or(wow_log_path.as_path())
-        .to_path_buf();
+/// `logs_dir` — the WoW Logs directory (e.g. `..\World of Warcraft\_retail_\Logs`).
+/// The tailer resolves and tracks the newest WoWCombatLog*.txt within it.
+pub async fn run(logs_dir: PathBuf, tx: Sender<String>) -> Result<()> {
+    tracing::info!("Tailer starting, watching directory: {:?}", logs_dir);
 
     let (fs_tx, fs_rx) = std_mpsc::channel::<notify::Result<Event>>();
 
-    // notify::Config with a small poll interval as fallback
     let config = notify::Config::default()
         .with_poll_interval(Duration::from_millis(500));
 
     let mut watcher = RecommendedWatcher::new(fs_tx, config)?;
-    watcher.watch(&watch_dir, RecursiveMode::NonRecursive)?;
+    watcher.watch(&logs_dir, RecursiveMode::NonRecursive)?;
 
-    let mut state = TailerState::new(wow_log_path.clone());
+    let mut state = TailerState::new(logs_dir);
 
-    // Initial read — pick up any lines already written before we started
-    if wow_log_path.exists() {
-        state.read_new_lines(&tx)?;
-    }
+    // Initial read — pick up any lines already in the current log file
+    state.read_new_lines(&tx)?;
 
     loop {
         match fs_rx.recv() {
-            Ok(Ok(Event { kind: EventKind::Modify(_), paths, .. })) => {
-                if paths.iter().any(|p| p == &wow_log_path) {
-                    if let Err(e) = state.read_new_lines(&tx) {
-                        tracing::warn!("Tailer read error: {}", e);
+            Ok(Ok(Event { kind, paths, .. })) => {
+                match kind {
+                    // A new file was created — check if it's a newer combat log
+                    EventKind::Create(_) => {
+                        let is_combat_log = paths.iter().any(|p| {
+                            p.file_name()
+                                .and_then(|n| n.to_str())
+                                .map(|n| n.starts_with("WoWCombatLog") && n.ends_with(".txt"))
+                                .unwrap_or(false)
+                        });
+                        if is_combat_log {
+                            state.check_for_new_log();
+                            // Read from the start of the new file immediately
+                            if let Err(e) = state.read_new_lines(&tx) {
+                                tracing::warn!("Tailer read error after log switch: {}", e);
+                            }
+                        }
                     }
+                    // Existing file was modified — read new lines if it's our active file
+                    EventKind::Modify(_) => {
+                        let active = state.active_file.as_deref();
+                        let is_active = paths.iter().any(|p| Some(p.as_path()) == active);
+                        if is_active {
+                            if let Err(e) = state.read_new_lines(&tx) {
+                                tracing::warn!("Tailer read error: {}", e);
+                            }
+                        }
+                    }
+                    _ => {} // Access / metadata / delete events — ignore
                 }
             }
-            Ok(Ok(_)) => {} // Create / delete / access events — ignore
             Ok(Err(e)) => tracing::error!("Watcher error: {}", e),
             Err(_) => {
                 tracing::warn!("Watcher channel closed — tailer exiting");
@@ -113,22 +187,28 @@ pub async fn run(wow_log_path: PathBuf, tx: Sender<String>) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
-    use tempfile::NamedTempFile;
+    use tempfile::tempdir;
     use tokio::sync::mpsc;
 
     #[tokio::test]
     async fn reads_initial_lines() {
-        let mut f = NamedTempFile::new().unwrap();
+        let dir = tempdir().unwrap();
+        let log_path = dir.path().join("WoWCombatLog.txt");
+        let mut f = std::fs::File::create(&log_path).unwrap();
         writeln!(f, "line one").unwrap();
         writeln!(f, "line two").unwrap();
         f.flush().unwrap();
 
         let (tx, mut rx) = mpsc::channel(16);
-        let mut state = TailerState::new(f.path().to_path_buf());
+        let mut state = TailerState::new(dir.path().to_path_buf());
         state.read_new_lines(&tx).unwrap();
 
         assert_eq!(rx.try_recv().unwrap(), "line one");
@@ -137,21 +217,78 @@ mod tests {
 
     #[tokio::test]
     async fn detects_rotation() {
-        let mut f = NamedTempFile::new().unwrap();
-        writeln!(f, "original content").unwrap();
-        f.flush().unwrap();
+        // Use a NamedTempFile in a known directory so TailerState can find it
+        let dir = tempdir().unwrap();
+        let log_path = dir.path().join("WoWCombatLog.txt");
+
+        {
+            let mut f = std::fs::File::create(&log_path).unwrap();
+            writeln!(f, "original content").unwrap();
+            f.flush().unwrap();
+        }
 
         let (tx, mut rx) = mpsc::channel(16);
-        let mut state = TailerState::new(f.path().to_path_buf());
+        let mut state = TailerState::new(dir.path().to_path_buf());
         state.read_new_lines(&tx).unwrap();
         let _ = rx.try_recv(); // consume "original content"
 
         // Simulate rotation: overwrite with shorter content
-        let mut f2 = std::fs::File::create(f.path()).unwrap();
-        writeln!(f2, "new").unwrap();
-        f2.flush().unwrap();
+        {
+            let mut f2 = std::fs::File::create(&log_path).unwrap();
+            writeln!(f2, "new").unwrap();
+            f2.flush().unwrap();
+        }
 
         state.read_new_lines(&tx).unwrap();
         assert_eq!(rx.try_recv().unwrap(), "new");
+    }
+
+    #[tokio::test]
+    async fn switches_to_newer_log_file() {
+        let dir = tempdir().unwrap();
+
+        // Create the "old" log
+        let old_path = dir.path().join("WoWCombatLog_2024_01_01_100000.txt");
+        {
+            let mut f = std::fs::File::create(&old_path).unwrap();
+            writeln!(f, "old line").unwrap();
+            f.flush().unwrap();
+        }
+
+        let (tx, mut rx) = mpsc::channel(16);
+        let mut state = TailerState::new(dir.path().to_path_buf());
+        state.read_new_lines(&tx).unwrap();
+        assert_eq!(rx.try_recv().unwrap(), "old line");
+
+        // WoW creates a newer log
+        let new_path = dir.path().join("WoWCombatLog_2024_06_15_195432.txt");
+        {
+            let mut f = std::fs::File::create(&new_path).unwrap();
+            writeln!(f, "new line").unwrap();
+            f.flush().unwrap();
+        }
+
+        // Simulate the Create event handler
+        state.check_for_new_log();
+        state.read_new_lines(&tx).unwrap();
+
+        assert_eq!(rx.try_recv().unwrap(), "new line");
+        // Confirm we really switched
+        assert_eq!(state.active_file.as_deref(), Some(new_path.as_path()));
+    }
+
+    /// Regression: tailer should not panic or error when the directory has no
+    /// combat log yet (e.g. player hasn't enabled /combatlog).
+    #[tokio::test]
+    async fn handles_empty_logs_dir_gracefully() {
+        let dir = tempdir().unwrap();
+        // Put an unrelated file in there
+        std::fs::File::create(dir.path().join("addon_errors.txt")).unwrap();
+
+        let (tx, mut rx) = mpsc::channel(16);
+        let mut state = TailerState::new(dir.path().to_path_buf());
+        // Should not error
+        state.read_new_lines(&tx).unwrap();
+        assert!(rx.try_recv().is_err()); // nothing emitted
     }
 }

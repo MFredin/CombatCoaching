@@ -55,14 +55,14 @@ function SettingsApp() {
       await save(updated);
       setDetectMsg(`Found: ${found}`);
     } else {
-      setDetectMsg("Not found automatically. Please browse.");
+      setDetectMsg("Not found automatically. Browse to your WoW Logs folder.");
     }
   }
 
   async function browsePath() {
     const selected = await open({
-      filters: [{ name: "WoW Combat Log", extensions: ["txt"] }],
-      title:   "Select WoWCombatLog.txt",
+      directory: true,
+      title:     "Select WoW Logs Folder (e.g. …\\World of Warcraft\\_retail_\\Logs)",
     });
     if (typeof selected === "string") {
       await save({ ...config, wow_log_path: selected });
@@ -106,9 +106,12 @@ function SettingsApp() {
           <ConnectionStatus status={connStatus} />
         </div>
         <div className="section">
-          <h3>WoW Log Path</h3>
-          <div style={{ fontSize: 11, color: "var(--muted)", wordBreak: "break-all", marginBottom: 8 }}>
+          <h3>WoW Logs Folder</h3>
+          <div style={{ fontSize: 11, color: "var(--muted)", wordBreak: "break-all", marginBottom: 4 }}>
             {config.wow_log_path || "Not configured"}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, fontStyle: "italic" }}>
+            The newest WoWCombatLog*.txt in this folder is tailed automatically.
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={detectPath}>Auto-detect</button>
