@@ -35,8 +35,8 @@ function OverlayApp() {
   // Load panel positions from config on mount
   useEffect(() => {
     invoke<AppConfig>("get_config")
-      .then((cfg) => setPanels(cfg.panel_positions))
-      .catch(() => {}); // No config yet — panels use CSS fallback positions
+      .then((cfg) => setPanels(cfg.panel_positions ?? []))
+      .catch(() => {}); // No config yet — panels use default positions
   }, []);
 
   // Subscribe to backend IPC events

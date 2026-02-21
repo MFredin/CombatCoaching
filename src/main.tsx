@@ -65,7 +65,7 @@ function SettingsApp() {
       title:   "Select WoWCombatLog.txt",
     });
     if (typeof selected === "string") {
-      await save({ ...config, wow_log_path: selected } as AppConfig);
+      await save({ ...config, wow_log_path: selected });
     }
   }
 
@@ -75,7 +75,7 @@ function SettingsApp() {
       title:   "Select CombatCoach.lua SavedVariables",
     });
     if (typeof selected === "string") {
-      await save({ ...config, addon_sv_path: selected } as AppConfig);
+      await save({ ...config, addon_sv_path: selected });
     }
   }
 
@@ -129,15 +129,15 @@ function SettingsApp() {
           <h3>Coaching Intensity</h3>
           <input
             type="range" min={1} max={5} step={1}
-            value={config.intensity}
+            value={config.intensity ?? 3}
             onChange={(e) => {
               const updated = { ...config, intensity: Number(e.target.value) };
               setConfig(updated);
-              save(updated);
+              void save(updated);
             }}
           />
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-            {intensityLabels[config.intensity] ?? ""}
+            {intensityLabels[config.intensity ?? 3] ?? ""}
           </div>
         </div>
       </aside>
@@ -149,7 +149,7 @@ function SettingsApp() {
           Drag panels to set their position on your screen. Changes take effect after restarting the overlay or relaunching the app.
         </p>
         <OverlayLayoutEditor
-          positions={config.panel_positions}
+          positions={config.panel_positions ?? []}
           onPositionChange={updatePanels}
         />
         {saving && (

@@ -45,13 +45,16 @@ export interface PanelPosition {
   visible: boolean;
 }
 
+// Fields with #[serde(default)] on the Rust side are optional here —
+// Rust always fills them in before sending, but partial spread-updates
+// in the settings UI only need to supply the field being changed.
 export interface AppConfig {
-  wow_log_path:    string;
-  addon_sv_path:   string;
-  intensity:       number;
-  player_focus:    string;
-  panel_positions: PanelPosition[];
-  major_cds:       number[];
+  wow_log_path:     string;
+  addon_sv_path:    string;
+  intensity?:       number;
+  player_focus?:    string;
+  panel_positions?: PanelPosition[];
+  major_cds?:       number[];
 }
 
 // IPC event name constants — must match ipc.rs
