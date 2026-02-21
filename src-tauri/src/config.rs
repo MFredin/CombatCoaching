@@ -169,6 +169,133 @@ pub fn find_latest_log(logs_dir: &Path) -> Option<PathBuf> {
     best.map(|(p, _)| p)
 }
 
+// ---------------------------------------------------------------------------
+// WTF character enumeration
+// ---------------------------------------------------------------------------
+
+/// A character found in the WTF directory tree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WtfCharacter {
+    /// The character name (folder name under Realm/)
+    pub name:    String,
+    /// The realm name (folder name under Account/<ACCOUNT>/)
+    pub realm:   String,
+    /// The account folder name (e.g. "12345678#1" or "ACCOUNT_NAME")
+    pub account: String,
+}
+
+/// Scan the WTF/Account directory tree for characters.
+///
+/// WTF directory layout:
+///   <WoW root>/WTF/Account/<ACCOUNT>/<REALM>/<CHARACTER>/
+///
+/// We derive the WoW root from `logs_dir` by walking up three levels:
+///   logs_dir  = <WoW root>/_retail_/Logs  OR  <WoW root>/Logs
+///
+/// We try both the `_retail_` subdirectory layout and the flat layout.
+pub fn scan_wtf_characters(logs_dir: &Path) -> Vec<WtfCharacter> {
+    // Try to find the WTF/Account dir by walking up from the Logs dir.
+    // Logs dir can be:
+    //   <install>/_retail_/Logs  → WTF is at <install>/_retail_/WTF
+    //   <install>/Logs            → WTF is at <install>/WTF
+    let candidates: Vec<PathBuf> = {
+        let mut v = Vec::new();
+        if let Some(parent) = logs_dir.parent() {
+            // <parent>/WTF/Account  (e.g. _retail_/WTF/Account)
+            v.push(parent.join("WTF").join("Account"));
+        }
+        v
+    };
+
+    let mut characters = Vec::new();
+
+    for account_root in candidates {
+        if !account_root.is_dir() {
+            continue;
+        }
+
+        // Iterate account folders (numeric Battle.net IDs or legacy names)
+        let accounts = match std::fs::read_dir(&account_root) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        for account_entry in accounts.flatten() {
+            if !account_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let account_name = account_entry.file_name().to_string_lossy().to_string();
+
+            // Iterate realm folders inside the account folder
+            let realms = match std::fs::read_dir(account_entry.path()) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+
+            for realm_entry in realms.flatten() {
+                if !realm_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                let realm_name = realm_entry.file_name().to_string_lossy().to_string();
+
+                // Skip known non-realm directories that live alongside realm folders
+                // (e.g. "SavedVariables", "macros-cache.txt")
+                if realm_name == "SavedVariables" || realm_name.contains('.') {
+                    continue;
+                }
+
+                // Iterate character folders inside the realm folder
+                let chars = match std::fs::read_dir(realm_entry.path()) {
+                    Ok(r) => r,
+                    Err(_) => continue,
+                };
+
+                for char_entry in chars.flatten() {
+                    if !char_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
+                    }
+                    let char_name = char_entry.file_name().to_string_lossy().to_string();
+
+                    characters.push(WtfCharacter {
+                        name:    char_name,
+                        realm:   realm_name.clone(),
+                        account: account_name.clone(),
+                    });
+                }
+            }
+        }
+
+        // If we found characters, don't try more candidate paths
+        if !characters.is_empty() {
+            break;
+        }
+    }
+
+    characters.sort_by(|a, b| a.realm.cmp(&b.realm).then(a.name.cmp(&b.name)));
+    characters
+}
+
+/// Tauri command: returns all WTF characters derived from the configured
+/// Logs directory.  Returns an empty list if the directory isn't set or
+/// the WTF tree can't be found.
+#[tauri::command]
+pub fn list_wtf_characters(app_handle: tauri::AppHandle) -> Vec<WtfCharacter> {
+    let dir = match app_handle.path().app_config_dir() {
+        Ok(d) => d,
+        Err(_) => return vec![],
+    };
+    let cfg = match load_or_default(&dir) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+    if cfg.wow_log_path.as_os_str().is_empty() {
+        return vec![];
+    }
+    let chars = scan_wtf_characters(&cfg.wow_log_path);
+    tracing::info!("WTF scan found {} characters", chars.len());
+    chars
+}
+
 /// Try to auto-detect the WoW Logs directory from common install locations.
 /// Returns the **directory** path (not a specific file) so the tailer can
 /// track whichever WoWCombatLog*.txt file is newest.
@@ -268,5 +395,83 @@ mod tests {
         std::fs::File::create(dir.path().join("Interface.log")).unwrap();
         std::fs::File::create(dir.path().join("addon_errors.txt")).unwrap();
         assert!(find_latest_log(dir.path()).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // WTF character scanner tests
+    // -----------------------------------------------------------------------
+
+    /// Build a fake WTF directory tree rooted under `logs_dir_parent`:
+    ///   <logs_dir_parent>/WTF/Account/<account>/<realm>/<char>/
+    fn build_fake_wtf(logs_parent: &std::path::Path, chars: &[(&str, &str, &str)]) {
+        // chars: (account, realm, character)
+        for (account, realm, character) in chars {
+            let char_dir = logs_parent
+                .join("WTF")
+                .join("Account")
+                .join(account)
+                .join(realm)
+                .join(character);
+            std::fs::create_dir_all(&char_dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn scan_wtf_finds_characters() {
+        // Directory layout:
+        //   tmpdir/
+        //     Logs/                  ← the "logs_dir"
+        //     WTF/Account/12345678#1/
+        //       Stormrage/Stonebraid/
+        //       Stormrage/Altbraid/
+        //       Silvermoon/Healbraid/
+        let root = tempdir().unwrap();
+        let logs_dir = root.path().join("Logs");
+        std::fs::create_dir_all(&logs_dir).unwrap();
+
+        build_fake_wtf(root.path(), &[
+            ("12345678#1", "Stormrage",  "Stonebraid"),
+            ("12345678#1", "Stormrage",  "Altbraid"),
+            ("12345678#1", "Silvermoon", "Healbraid"),
+        ]);
+
+        let chars = scan_wtf_characters(&logs_dir);
+        assert_eq!(chars.len(), 3);
+
+        // Results are sorted by realm then name
+        assert_eq!(chars[0].realm, "Silvermoon");
+        assert_eq!(chars[0].name,  "Healbraid");
+        assert_eq!(chars[1].realm, "Stormrage");
+        assert_eq!(chars[1].name,  "Altbraid");
+        assert_eq!(chars[2].name,  "Stonebraid");
+    }
+
+    #[test]
+    fn scan_wtf_skips_saved_variables_dir() {
+        let root = tempdir().unwrap();
+        let logs_dir = root.path().join("Logs");
+        std::fs::create_dir_all(&logs_dir).unwrap();
+
+        build_fake_wtf(root.path(), &[
+            ("12345678#1", "Stormrage",        "Stonebraid"),
+        ]);
+        // Create a SavedVariables dir at the realm level (should be skipped)
+        std::fs::create_dir_all(
+            root.path().join("WTF").join("Account").join("12345678#1").join("SavedVariables")
+        ).unwrap();
+
+        let chars = scan_wtf_characters(&logs_dir);
+        // Only the real character, not SavedVariables
+        assert_eq!(chars.len(), 1);
+        assert_eq!(chars[0].name, "Stonebraid");
+    }
+
+    #[test]
+    fn scan_wtf_returns_empty_when_no_wtf_dir() {
+        let root = tempdir().unwrap();
+        let logs_dir = root.path().join("Logs");
+        std::fs::create_dir_all(&logs_dir).unwrap();
+        // No WTF directory at all
+        assert!(scan_wtf_characters(&logs_dir).is_empty());
     }
 }

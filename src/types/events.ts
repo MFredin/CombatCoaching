@@ -58,6 +58,14 @@ export interface AppConfig {
   major_cds?:       number[];
 }
 
+/// A character found in the WTF directory tree.
+/// Mirrors config::WtfCharacter on the Rust side.
+export interface WtfCharacter {
+  name:    string;
+  realm:   string;
+  account: string;
+}
+
 // IPC event name constants — must match ipc.rs
 export const EVENT_ADVICE:     string = "coach:advice";
 export const EVENT_STATE:      string = "coach:state";

@@ -83,6 +83,7 @@ pub fn run() {
             config::get_config,
             config::save_config,
             config::detect_wow_path,
+            config::list_wtf_characters,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

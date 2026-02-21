@@ -10,6 +10,7 @@ import type {
   AppConfig,
   ConnectionStatus as ConnStatus,
   PanelPosition,
+  WtfCharacter,
 } from "./types/events";
 import "./styles/settings.css";
 
@@ -24,11 +25,23 @@ function SettingsApp() {
   });
   const [saving, setSaving]         = useState(false);
   const [detectMsg, setDetectMsg]   = useState("");
+  const [wtfChars, setWtfChars]     = useState<WtfCharacter[]>([]);
 
   // Load config on mount
   useEffect(() => {
     invoke<AppConfig>("get_config").then(setConfig).catch(console.error);
   }, []);
+
+  // Reload WTF character list whenever the config is updated
+  useEffect(() => {
+    if (config?.wow_log_path) {
+      invoke<WtfCharacter[]>("list_wtf_characters")
+        .then(setWtfChars)
+        .catch(() => setWtfChars([]));
+    } else {
+      setWtfChars([]);
+    }
+  }, [config?.wow_log_path]);
 
   useTauriEvents({
     onConnection: useCallback((s: ConnStatus) => setConnStatus(s), []),
@@ -122,11 +135,45 @@ function SettingsApp() {
           )}
         </div>
         <div className="section">
-          <h3>Addon SavedVariables</h3>
-          <div style={{ fontSize: 11, color: "var(--muted)", wordBreak: "break-all", marginBottom: 8 }}>
-            {config.addon_sv_path || "Not configured"}
-          </div>
-          <button onClick={browseAddonPath}>Browse…</button>
+          <h3>Coached Character</h3>
+          {wtfChars.length > 0 ? (
+            <>
+              <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
+                Found from WTF folder — no addon required.
+              </div>
+              <select
+                value={config.player_focus ?? ""}
+                onChange={(e) => {
+                  const updated = { ...config, player_focus: e.target.value };
+                  setConfig(updated);
+                  void save(updated);
+                }}
+                style={{ width: "100%", fontSize: 12 }}
+              >
+                <option value="">— Auto-detect from log —</option>
+                {wtfChars.map((c) => {
+                  const key = `${c.name}-${c.realm}`;
+                  return (
+                    <option key={key} value={key}>
+                      {c.name} ({c.realm})
+                    </option>
+                  );
+                })}
+              </select>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
+                {config.wow_log_path
+                  ? "No characters found in WTF folder."
+                  : "Set the Logs folder above to populate this list."}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted)", wordBreak: "break-all", marginBottom: 6 }}>
+                Addon SVars: {config.addon_sv_path || "Not configured"}
+              </div>
+              <button onClick={browseAddonPath}>Browse addon SVars…</button>
+            </>
+          )}
         </div>
         <div className="section">
           <h3>Coaching Intensity</h3>
