@@ -51,7 +51,7 @@ function SettingsApp() {
   async function detectPath() {
     const found = await invoke<string | null>("detect_wow_path");
     if (found) {
-      const updated: AppConfig = { ...config, wow_log_path: found };
+      const updated = { ...config, wow_log_path: found };
       await save(updated);
       setDetectMsg(`Found: ${found}`);
     } else {
@@ -80,7 +80,7 @@ function SettingsApp() {
   }
 
   function updatePanels(positions: PanelPosition[]) {
-    const updated: AppConfig = { ...config, panel_positions: positions };
+    const updated = { ...config, panel_positions: positions };
     setConfig(updated);
     void save(updated);
   }

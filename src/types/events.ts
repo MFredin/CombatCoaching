@@ -45,12 +45,13 @@ export interface PanelPosition {
   visible: boolean;
 }
 
-// Fields with #[serde(default)] on the Rust side are optional here —
-// Rust always fills them in before sending, but partial spread-updates
-// in the settings UI only need to supply the field being changed.
+// All fields are optional here because:
+// - Rust fills them in with #[serde(default)] before sending to the frontend
+// - Spread-updates in the settings UI only supply the field being changed
+// - config closures capture AppConfig | null so spreading produces optional fields
 export interface AppConfig {
-  wow_log_path:     string;
-  addon_sv_path:    string;
+  wow_log_path?:    string;
+  addon_sv_path?:   string;
   intensity?:       number;
   player_focus?:    string;
   panel_positions?: PanelPosition[];
