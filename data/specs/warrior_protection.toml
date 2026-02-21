@@ -1,0 +1,41 @@
+# Protection Warrior — spec profile
+# Used by the cooldown_drift rule to identify major cooldowns.
+# Spell IDs sourced from Wowhead for The War Within (11.x).
+
+[spec]
+class       = "WARRIOR"
+spec        = "Protection"
+role        = "TANK"
+description = "Protection Warrior major cooldowns and active mitigation."
+
+# Major cooldown spell IDs — used by the cooldown_drift rule.
+# These are observed via SPELL_CAST_SUCCESS in the combat log.
+[spec.cooldowns]
+major_cd_spell_ids = [
+    871,    # Shield Wall         (40% DR, 4 min CD)
+    12975,  # Last Stand          (30% max health, 3 min CD)
+    1160,   # Demoralizing Shout  (Ignore Pain interaction)
+    97462,  # Rallying Cry        (raid-wide, 3 min CD)
+    118038, # Die by the Sword    (100% parry for 8s, 2 min CD) — Arms/Prot
+    190456, # Ignore Pain         (not a CD per se, but a major mitigation cast)
+]
+
+# Active mitigation spell IDs — used for uptime tracking (Phase 1).
+# These should be cast frequently to block/parry during combat.
+[spec.active_mitigation]
+am_spell_ids = [
+    2565,   # Shield Block  (block next attack for 6s, 16s CD)
+    6343,   # Thunder Clap  (AoE slow + threat)
+    20243,  # Devastate     (generates Revenge procs)
+    772,    # Rend          (sustained damage, rage generation)
+]
+
+# GCD-bound offensive abilities (for uptime analysis, Phase 1)
+[spec.rotation]
+primary_spell_ids = [
+    6343,   # Thunder Clap
+    20243,  # Devastate
+    772,    # Rend
+    1680,   # Whirlwind
+    23922,  # Shield Slam
+]

@@ -1,0 +1,29 @@
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(11, 15, 24, 0.88);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 6px 12px;
+  width: fit-content;
+}
+
+.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.time {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.active .time {
+  color: var(--good);
+}

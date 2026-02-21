@@ -1,0 +1,28 @@
+# Holy Priest — spec profile
+# Spell IDs sourced from Wowhead for The War Within (11.x).
+
+[spec]
+class       = "PRIEST"
+spec        = "Holy"
+role        = "HEALER"
+description = "Holy Priest major cooldowns and throughput windows."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    64843,  # Divine Hymn          (raid healing CD, 3 min)
+    47788,  # Guardian Spirit       (personal target CD, 3 min)
+    200183, # Apotheosis             (talented, enhances Holy Words, 3 min)
+    246287, # Evangelism             (talented, extends Atonement, 1.5 min — Disc crossover)
+    10060,  # Power Infusion         (haste CD, 2 min)
+    33206,  # Pain Suppression       (Disc — included as a defensive option)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    2050,   # Holy Word: Serenity  (single target heal)
+    596,    # Prayer of Healing     (AoE)
+    139,    # Renew
+    2061,   # Flash Heal
+    1healing,  # Holy Word: Sanctify (ground AoE)
+    34861,  # Circle of Healing    (talented)
+]

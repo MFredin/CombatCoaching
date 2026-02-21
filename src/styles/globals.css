@@ -1,0 +1,16 @@
+/* Shared design tokens — imported by both overlay.css and settings.css */
+:root {
+  --bg:     #0b0f18;
+  --panel:  rgba(11, 15, 24, 0.92);
+  --stroke: rgba(34, 48, 79, 0.8);
+  --text:   #e8eefc;
+  --muted:  #a9b6d6;
+  --accent: #7c5cff;
+  --good:   #2bd576;
+  --warn:   #ffcc66;
+  --bad:    #ff5c77;
+  --mono:   ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --sans:   ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }

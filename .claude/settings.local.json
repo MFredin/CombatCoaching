@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(node --version:*)",
+      "Bash(npm --version:*)",
+      "Bash(where:*)",
+      "Bash(cmd /c \"node --version && npm --version\")",
+      "Bash(cmd /c \"cargo --version && rustup --version\")",
+      "Bash(cmd /c \"dir /b /s C:\\\\Users\\\\mfred\\\\.cargo\\\\bin\\\\cargo.exe 2>nul\")",
+      "Bash(export PATH=\"$PATH:/c/Users/mfred/.cargo/bin\")",
+      "Bash(cargo --version:*)"
+    ]
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CombatLedger Live Coach",
+  "identifier": "com.combatledger.livecoach",
+  "version": "0.1.0",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label":      "settings",
+        "title":      "CombatLedger Live Coach",
+        "url":        "index.html",
+        "width":      1200,
+        "height":     800,
+        "minWidth":   900,
+        "minHeight":  600,
+        "resizable":  true,
+        "fullscreen": false,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "decorations": true,
+        "focus":      true,
+        "visible":    true
+      },
+      {
+        "label":      "overlay",
+        "title":      "",
+        "url":        "overlay.html",
+        "width":      1920,
+        "height":     1080,
+        "x":          0,
+        "y":          0,
+        "resizable":  false,
+        "fullscreen": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "focus":      false,
+        "skipTaskbar": true,
+        "visible":    false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "languages": ["English"]
+      }
+    }
+  }
+}

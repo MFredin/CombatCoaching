@@ -1,0 +1,29 @@
+.wrap {
+  position: relative;
+  height: 100px;
+  width: 280px;
+  background: rgba(11, 15, 24, 0.88);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.label {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.tick {
+  position: absolute;
+  bottom: 0;
+  width: 3px;
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+.tick.bad  { background: var(--bad);  }
+.tick.warn { background: var(--warn); }
+.tick.good { background: var(--good); }

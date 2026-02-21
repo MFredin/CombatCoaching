@@ -1,0 +1,35 @@
+# Example encounter definition — used by the coaching engine to know which
+# spells are avoidable, which casts should be interrupted, etc.
+#
+# Spell IDs can be found on Wowhead or by searching your own combat log.
+# Add one file per boss encounter, named by encounter name or ID.
+# These files are loaded at startup and can be updated without recompiling.
+
+[encounter]
+name        = "Training Dummy"
+description = "Placeholder encounter for testing the coaching pipeline."
+boss_npc_ids = []  # NPC IDs that identify this encounter (empty = all dummies)
+
+# Spells that deal avoidable damage — the player should move out of / dodge these.
+# Used by the avoidable_repeat rule.
+# Format: spell_id = "spell name (for display)"
+[encounter.avoidable_spells]
+# 471809 = "Shadow Surge"   (placeholder — replace with real IDs)
+# 471234 = "Void Nova"
+avoidable_spell_ids = []
+
+# Casts that should be interrupted. Used by the interrupt_miss rule (Phase 1).
+[encounter.interruptible_casts]
+interruptible_spell_ids = []
+# Optional: cast names for display when the rule fires
+# 471600 = "Void Bolt"
+
+# Tank-specific: spells that require a defensive cooldown or tank swap.
+[encounter.tank_mechanics]
+tank_buster_spell_ids = []  # Triggers tank buster coaching (Phase 2)
+swap_debuff_spell_id  = 0   # Debuff that indicates a tank swap is needed
+
+# Predictable damage windows — boss casts that precede a burst phase.
+# Used to suggest pre-emptive defensive cooldown usage (Phase 2).
+[encounter.predictable_spikes]
+spike_spell_ids = []

@@ -1,0 +1,23 @@
+@import "./globals.css";
+
+/* The overlay body MUST be transparent — WoW shows through undrawn areas.
+   Any pixel with a fully transparent background passes mouse events to WoW
+   when set_ignore_cursor_events(true) is active on the Rust side. */
+html, body {
+  margin:     0;
+  padding:    0;
+  background: transparent !important;
+  overflow:   hidden;
+  font-family: var(--sans);
+  color:       var(--text);
+}
+
+/* Root container — full screen, transparent, no pointer events at root */
+#overlay-root {
+  position:       relative;
+  width:          100vw;
+  height:         100vh;
+  background:     transparent;
+  overflow:       hidden;
+  pointer-events: none; /* Belt-and-suspenders alongside Rust click-through */
+}

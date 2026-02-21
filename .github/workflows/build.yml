@@ -1,0 +1,122 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"           # Trigger on version tags: v0.1.0, v1.0.0, etc.
+  workflow_dispatch:   # Allow manual triggering from the GitHub UI
+
+jobs:
+  build-windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Install Node.js (for Vite/React frontend build)
+      # -----------------------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      # -----------------------------------------------------------------------
+      # 3. Install Rust stable toolchain
+      # -----------------------------------------------------------------------
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # -----------------------------------------------------------------------
+      # 4. Cache Rust build artifacts (speeds up subsequent builds significantly)
+      # -----------------------------------------------------------------------
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      # -----------------------------------------------------------------------
+      # 5. Install npm dependencies
+      # -----------------------------------------------------------------------
+      - name: Install npm dependencies
+        run: npm ci
+
+      # -----------------------------------------------------------------------
+      # 6. Build the Tauri app (compiles Rust + bundles React + creates NSIS installer)
+      # -----------------------------------------------------------------------
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName:       ${{ github.ref_name }}
+          releaseName:   "CombatLedger Live Coach ${{ github.ref_name }}"
+          releaseBody:   |
+            ## CombatLedger Live Coach ${{ github.ref_name }}
+
+            ### Installation
+            1. Download and run `CombatLedger-Live-Coach_x.x.x_x64-setup.exe`
+            2. Launch **CombatLedger Live Coach** from the Start Menu
+            3. On first run, click **Auto-detect** to find your WoW installation
+            4. Install the **CombatCoach** addon from the `addon/` folder in this release
+            5. Log into WoW and type `/cc` to confirm the addon is working
+
+            ### What's in this release
+            - Real-time combat log tailing
+            - Three coaching rules: avoidable damage, GCD gaps, cooldown drift
+            - Transparent always-on-top overlay (WoW must use Windowed Fullscreen)
+            - Drag-and-drop overlay panel layout editor
+
+            ### Requirements
+            - Windows 10/11
+            - World of Warcraft (retail) in **Windowed (Fullscreen)** mode
+            - WebView2 (included with Windows 11 / Microsoft Edge)
+          releaseDraft:   true
+          prerelease:     false
+
+      # -----------------------------------------------------------------------
+      # 7. Upload the NSIS installer as a build artifact (available even without a tag)
+      # -----------------------------------------------------------------------
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CombatLedger-Windows-Installer
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Run Rust unit tests (runs on every push, not just tags)
+  # ---------------------------------------------------------------------------
+  test:
+    name: Rust Unit Tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install npm dependencies (needed for tauri-build)
+        run: npm ci
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+        env:
+          TAURI_SKIP_DEVSERVER_CHECK: "true"

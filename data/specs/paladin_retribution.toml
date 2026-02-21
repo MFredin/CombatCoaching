@@ -1,0 +1,35 @@
+# Retribution Paladin — spec profile
+# Spell IDs sourced from Wowhead for The War Within (11.x).
+
+[spec]
+class       = "PALADIN"
+spec        = "Retribution"
+role        = "DAMAGER"
+description = "Retribution Paladin major cooldowns and burst window alignment."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    31884,  # Avenging Wrath      (20% damage/healing, ~1 min CD with talents)
+    642,    # Divine Shield        (immunity, 5 min CD)
+    498,    # Divine Protection    (20% DR, 1 min CD)
+    105809, # Holy Avenger         (talented, 3 min CD — generates more Holy Power)
+    343527, # Execution Sentence   (talented, 1 min CD)
+    96231,  # Rebuke               (interrupt — used to verify kick coverage)
+    184662, # Shield of Vengeance  (personal defensive, ~1.5 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    498,    # Divine Protection
+    184662, # Shield of Vengeance
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    35395,  # Crusader Strike   (builder)
+    24275,  # Hammer of Wrath   (execute range)
+    53385,  # Divine Storm      (AoE builder)
+    20271,  # Judgment          (debuff + Holy Power)
+    85256,  # Templar's Verdict (spender)
+    53600,  # Shield of the Righteous (spender — Prot carry-over talent)
+]

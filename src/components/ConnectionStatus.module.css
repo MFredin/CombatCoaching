@@ -1,0 +1,44 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: rgba(15, 21, 38, 0.8);
+  color: var(--muted);
+  width: fit-content;
+}
+
+.pill.on {
+  border-color: rgba(43, 213, 118, 0.35);
+  background: rgba(43, 213, 118, 0.08);
+  color: #d6ffe6;
+}
+
+.led {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--bad);
+  flex: 0 0 auto;
+}
+
+.pill.on .led {
+  background: var(--good);
+}
+
+.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.state { font-size: 11px; }
