@@ -51,7 +51,7 @@ function SettingsApp() {
   async function detectPath() {
     const found = await invoke<string | null>("detect_wow_path");
     if (found) {
-      const updated = { ...config, wow_log_path: found };
+      const updated: AppConfig = { ...config, wow_log_path: found };
       await save(updated);
       setDetectMsg(`Found: ${found}`);
     } else {
@@ -65,7 +65,7 @@ function SettingsApp() {
       title:   "Select WoWCombatLog.txt",
     });
     if (typeof selected === "string") {
-      await save({ ...config, wow_log_path: selected });
+      await save({ ...config, wow_log_path: selected } as AppConfig);
     }
   }
 
@@ -75,14 +75,14 @@ function SettingsApp() {
       title:   "Select CombatCoach.lua SavedVariables",
     });
     if (typeof selected === "string") {
-      await save({ ...config, addon_sv_path: selected });
+      await save({ ...config, addon_sv_path: selected } as AppConfig);
     }
   }
 
   function updatePanels(positions: PanelPosition[]) {
-    const updated = { ...config, panel_positions: positions };
+    const updated: AppConfig = { ...config, panel_positions: positions };
     setConfig(updated);
-    save(updated);
+    void save(updated);
   }
 
   const intensityLabels: Record<number, string> = {

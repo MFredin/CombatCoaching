@@ -24,7 +24,7 @@ rusqlite             = { version = "0.31", features = ["bundled"] }
 anyhow               = "1"
 thiserror            = "1"
 once_cell            = "1"
-tracing              = "1"
+tracing              = "0.1"
 tracing-subscriber   = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
