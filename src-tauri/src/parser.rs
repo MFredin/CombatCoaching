@@ -242,8 +242,11 @@ pub fn parse_line(raw: &str) -> Option<LogEvent> {
 
     let src_guid = unquote(f.get(2)?).to_owned();
     let src_name = unquote(f.get(3)?).to_owned();
-    let dst_guid = unquote(f.get(6)?).to_owned();
-    let dst_name = unquote(f.get(7)?).to_owned();
+    // ENCOUNTER_START / ENCOUNTER_END have only 5 fields and no source/dest
+    // header, so f[6] and f[7] don't exist.  Use map_or so those events can
+    // still reach their match arm instead of returning None here.
+    let dst_guid = f.get(6).map_or("", |s| unquote(s)).to_owned();
+    let dst_name = f.get(7).map_or("", |s| unquote(s)).to_owned();
 
     match *f.first()? {
         "SPELL_DAMAGE" | "SPELL_PERIODIC_DAMAGE" | "RANGE_DAMAGE" => {
