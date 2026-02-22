@@ -98,13 +98,18 @@ function AbsPanel({
   children: React.ReactNode;
 }) {
   if (!pos.visible) return null;
+  const opacity = pos.opacity ?? 1.0;
+  const scale   = pos.scale   ?? 1.0;
   return (
     <div
       style={{
-        position:      "absolute",
-        left:          pos.x,
-        top:           pos.y,
-        pointerEvents: "none", // All overlay elements are non-interactive
+        position:        "absolute",
+        left:            pos.x,
+        top:             pos.y,
+        opacity,
+        transform:       scale !== 1.0 ? `scale(${scale})` : undefined,
+        transformOrigin: "top left",
+        pointerEvents:   "none", // All overlay elements are non-interactive
       }}
     >
       {children}

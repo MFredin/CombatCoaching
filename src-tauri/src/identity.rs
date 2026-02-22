@@ -21,7 +21,10 @@ use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::mpsc as std_mpsc;
+use tauri::AppHandle;
 use tokio::sync::mpsc::Sender;
+
+use crate::ipc::{self, ConnectionStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PlayerIdentity {
@@ -81,14 +84,23 @@ fn parse_saved_variables(content: &str) -> Option<PlayerIdentity> {
     })
 }
 
-pub async fn run(sv_path: PathBuf, tx: Sender<PlayerIdentity>) -> Result<()> {
+pub async fn run(sv_path: PathBuf, tx: Sender<PlayerIdentity>, app_handle: AppHandle) -> Result<()> {
     tracing::info!("Identity watcher starting: {:?}", sv_path);
+
+    // Emit initial addon status
+    let mut addon_connected = false;
 
     // Initial parse if file already exists (player was logged in previously)
     if sv_path.exists() {
         let content = std::fs::read_to_string(&sv_path)?;
         if let Some(id) = parse_saved_variables(&content) {
             tracing::info!("Identity loaded: {} ({}/{})", id.name, id.class, id.spec);
+            addon_connected = true;
+            ipc::emit_connection(&app_handle, &ConnectionStatus {
+                log_tailing:     true, // tailer already running at this point
+                addon_connected: true,
+                wow_path:        String::new(), // tailer owns this field
+            });
             let _ = tx.send(id).await;
         }
     } else {
@@ -109,6 +121,14 @@ pub async fn run(sv_path: PathBuf, tx: Sender<PlayerIdentity>) -> Result<()> {
                         Ok(content) => {
                             if let Some(id) = parse_saved_variables(&content) {
                                 tracing::info!("Identity updated: {} ({}/{})", id.name, id.class, id.spec);
+                                if !addon_connected {
+                                    addon_connected = true;
+                                    ipc::emit_connection(&app_handle, &ConnectionStatus {
+                                        log_tailing:     true,
+                                        addon_connected: true,
+                                        wow_path:        String::new(),
+                                    });
+                                }
                                 if tx.send(id).await.is_err() {
                                     break;
                                 }

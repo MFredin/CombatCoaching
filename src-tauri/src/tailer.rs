@@ -21,9 +21,11 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::mpsc as std_mpsc;
 use std::time::Duration;
+use tauri::AppHandle;
 use tokio::sync::mpsc::Sender;
 
 use crate::config::find_latest_log;
+use crate::ipc::{self, ConnectionStatus};
 
 // ---------------------------------------------------------------------------
 // Active-file state
@@ -126,9 +128,15 @@ impl TailerState {
 // Public entry point
 // ---------------------------------------------------------------------------
 
-/// `logs_dir` — the WoW Logs directory (e.g. `..\World of Warcraft\_retail_\Logs`).
-/// The tailer resolves and tracks the newest WoWCombatLog*.txt within it.
-pub async fn run(logs_dir: PathBuf, tx: Sender<String>) -> Result<()> {
+/// `logs_dir`    — the WoW Logs directory (e.g. `..\World of Warcraft\_retail_\Logs`).
+/// `app_handle`  — used to emit `coach:connection` status events to the frontend.
+/// `wow_path_str`— human-readable path shown in the settings Connection panel.
+pub async fn run(
+    logs_dir:     PathBuf,
+    tx:           Sender<String>,
+    app_handle:   AppHandle,
+    wow_path_str: String,
+) -> Result<()> {
     tracing::info!("Tailer starting, watching directory: {:?}", logs_dir);
 
     let (fs_tx, fs_rx) = std_mpsc::channel::<notify::Result<Event>>();
@@ -140,6 +148,14 @@ pub async fn run(logs_dir: PathBuf, tx: Sender<String>) -> Result<()> {
     watcher.watch(&logs_dir, RecursiveMode::NonRecursive)?;
 
     let mut state = TailerState::new(logs_dir);
+
+    // Emit initial connection status so the settings UI reflects reality immediately.
+    let tailing_now = state.active_file.is_some();
+    ipc::emit_connection(&app_handle, &ConnectionStatus {
+        log_tailing:     tailing_now,
+        addon_connected: false,   // updated by identity watcher
+        wow_path:        wow_path_str.clone(),
+    });
 
     // Initial read — pick up any lines already in the current log file
     state.read_new_lines(&tx)?;
@@ -157,8 +173,16 @@ pub async fn run(logs_dir: PathBuf, tx: Sender<String>) -> Result<()> {
                                 .unwrap_or(false)
                         });
                         if is_combat_log {
+                            let was_tailing = state.active_file.is_some();
                             state.check_for_new_log();
-                            // Read from the start of the new file immediately
+                            // Emit updated status when we first pick up a log file
+                            if !was_tailing && state.active_file.is_some() {
+                                ipc::emit_connection(&app_handle, &ConnectionStatus {
+                                    log_tailing:     true,
+                                    addon_connected: false,
+                                    wow_path:        wow_path_str.clone(),
+                                });
+                            }
                             if let Err(e) = state.read_new_lines(&tx) {
                                 tracing::warn!("Tailer read error after log switch: {}", e);
                             }

@@ -55,10 +55,22 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
     );
   }
 
+  function setOpacity(id: string, opacity: number) {
+    onPositionChange(
+      positions.map((p) => (p.id === id ? { ...p, opacity } : p))
+    );
+  }
+
+  function setPanelScale(id: string, scale: number) {
+    onPositionChange(
+      positions.map((p) => (p.id === id ? { ...p, scale } : p))
+    );
+  }
+
   return (
     <div className={styles.wrap}>
       <div className={styles.hint}>
-        Drag panels to reposition. Click the eye icon to show/hide.
+        Drag panels to reposition. Use the controls below to adjust visibility, opacity, and scale.
       </div>
       <DndContext onDragEnd={handleDragEnd}>
         <div className={styles.canvas} style={{ width: W, height: H }}>
@@ -73,6 +85,55 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
           ))}
         </div>
       </DndContext>
+
+      {/* Per-panel detail controls below the canvas */}
+      <div className={styles.panelControls}>
+        {positions.map((p) => (
+          <div key={p.id} className={styles.panelRow}>
+            <span className={styles.panelRowLabel}>{PANEL_LABELS[p.id] ?? p.id}</span>
+
+            <button
+              className={styles.eye}
+              onClick={() => toggleVisible(p.id)}
+              title={p.visible ? "Hide panel" : "Show panel"}
+            >
+              {p.visible ? "👁" : "🚫"}
+            </button>
+
+            <label className={styles.sliderLabel}>
+              Opacity
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={p.opacity ?? 1.0}
+                onChange={(e) => setOpacity(p.id, parseFloat(e.target.value))}
+                className={styles.slider}
+              />
+              <span className={styles.sliderValue}>
+                {Math.round((p.opacity ?? 1.0) * 100)}%
+              </span>
+            </label>
+
+            <label className={styles.sliderLabel}>
+              Scale
+              <input
+                type="range"
+                min={0.5}
+                max={2.0}
+                step={0.05}
+                value={p.scale ?? 1.0}
+                onChange={(e) => setPanelScale(p.id, parseFloat(e.target.value))}
+                className={styles.slider}
+              />
+              <span className={styles.sliderValue}>
+                {((p.scale ?? 1.0) * 100).toFixed(0)}%
+              </span>
+            </label>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

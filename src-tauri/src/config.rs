@@ -18,16 +18,25 @@ use tauri::Manager; // required for AppHandle::path() and app_config_dir()
 // AppConfig
 // ---------------------------------------------------------------------------
 
-/// Position and visibility of a single overlay panel.
+/// Position, visibility, and appearance of a single overlay panel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PanelPosition {
-    /// Panel identifier — matches the `data-panel-id` attribute in the overlay.
+    /// Panel identifier — matches the known panel IDs in the overlay.
     /// Known IDs: "now_feed", "pull_clock", "timeline", "stat_widgets"
     pub id:      String,
     pub x:       i32,
     pub y:       i32,
     pub visible: bool,
+    /// Background + text opacity 0.0–1.0 (default 1.0 = fully visible)
+    #[serde(default = "default_opacity")]
+    pub opacity: f32,
+    /// Uniform scale factor 0.5–2.0 (default 1.0 = native size)
+    #[serde(default = "default_scale")]
+    pub scale:   f32,
 }
+
+fn default_opacity() -> f32 { 1.0 }
+fn default_scale()   -> f32 { 1.0 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -63,10 +72,10 @@ fn default_intensity() -> u8 { 3 }
 
 fn default_panel_positions() -> Vec<PanelPosition> {
     vec![
-        PanelPosition { id: "pull_clock".to_owned(),   x: 20,  y: 20,  visible: true },
-        PanelPosition { id: "now_feed".to_owned(),     x: 20,  y: 70,  visible: true },
-        PanelPosition { id: "timeline".to_owned(),     x: 20,  y: 500, visible: true },
-        PanelPosition { id: "stat_widgets".to_owned(), x: 20,  y: 670, visible: true },
+        PanelPosition { id: "pull_clock".to_owned(),   x: 20,  y: 20,  visible: true, opacity: 1.0, scale: 1.0 },
+        PanelPosition { id: "now_feed".to_owned(),     x: 20,  y: 70,  visible: true, opacity: 1.0, scale: 1.0 },
+        PanelPosition { id: "timeline".to_owned(),     x: 20,  y: 500, visible: true, opacity: 1.0, scale: 1.0 },
+        PanelPosition { id: "stat_widgets".to_owned(), x: 20,  y: 670, visible: true, opacity: 1.0, scale: 1.0 },
     ]
 }
 

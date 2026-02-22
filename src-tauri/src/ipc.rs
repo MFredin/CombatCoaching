@@ -72,8 +72,7 @@ pub async fn run(
 }
 
 /// Convenience function — emit a connection status update from anywhere
-/// that has an AppHandle (e.g., tailer on connect/disconnect).
-#[allow(dead_code)] // called by tailer/identity watcher in future phases
+/// that has an AppHandle (called by tailer and identity watcher).
 pub fn emit_connection(handle: &AppHandle, status: &ConnectionStatus) {
     if let Err(e) = handle.emit(EVENT_CONNECTION, status) {
         tracing::warn!("Failed to emit connection status: {}", e);

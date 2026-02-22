@@ -58,3 +58,49 @@
   opacity: 0.7;
 }
 .eye:hover { opacity: 1; }
+
+/* Per-panel detail controls below the canvas */
+.panelControls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.panelRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+}
+
+.panelRowLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 80px;
+}
+
+.sliderLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.slider {
+  width: 90px;
+  accent-color: var(--accent, #7c5cff);
+  cursor: pointer;
+}
+
+.sliderValue {
+  font-size: 11px;
+  color: var(--text);
+  min-width: 32px;
+  text-align: right;
+}

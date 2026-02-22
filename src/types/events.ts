@@ -39,10 +39,14 @@ export interface ConnectionStatus {
 }
 
 export interface PanelPosition {
-  id:      string;
-  x:       number;
-  y:       number;
-  visible: boolean;
+  id:       string;
+  x:        number;
+  y:        number;
+  visible:  boolean;
+  /** Background + text opacity 0–1 (default 1.0) */
+  opacity?: number;
+  /** Uniform scale factor 0.5–2.0 (default 1.0) */
+  scale?:   number;
 }
 
 // All fields are optional here because:

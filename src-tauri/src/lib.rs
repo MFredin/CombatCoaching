@@ -9,6 +9,7 @@ mod state;
 mod tailer;
 
 use tauri::{Emitter, Manager};
+use tauri::dpi::{PhysicalPosition, PhysicalSize};
 use tokio::sync::mpsc;
 
 pub fn run() {
@@ -26,6 +27,22 @@ pub fn run() {
             // --- Overlay window: make it transparent and click-through ---
             let overlay = app.get_webview_window("overlay").expect("overlay window not found");
             overlay.set_ignore_cursor_events(true)?;
+
+            // --- Resize overlay to cover the primary monitor exactly ---
+            // tauri.conf.json hardcodes 1920x1080 as a safe fallback; we override
+            // at runtime so high-DPI, ultrawide, and non-1080p monitors are covered.
+            if let Ok(Some(monitor)) = overlay.current_monitor() {
+                let size = monitor.size();
+                let pos  = monitor.position();
+                tracing::info!(
+                    "Overlay monitor: {}x{} at ({},{})",
+                    size.width, size.height, pos.x, pos.y
+                );
+                let _ = overlay.set_size(PhysicalSize::new(size.width, size.height));
+                let _ = overlay.set_position(PhysicalPosition::new(pos.x, pos.y));
+            } else {
+                tracing::warn!("Could not detect monitor size — overlay uses conf.json defaults");
+            }
 
             // --- Load config (or create default on first run) ---
             let config_dir = app.path().app_config_dir()?;
@@ -47,11 +64,13 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // --- If paths are configured, start the pipeline ---
-            // On first run, paths will be empty; the settings UI shows a wizard
-            // that calls the start_pipeline command once paths are saved.
+            // On first run paths will be empty; the settings UI wizard saves them.
             if !cfg.wow_log_path.as_os_str().is_empty() {
+                let wow_path_str = cfg.wow_log_path.to_string_lossy().to_string();
                 start_pipeline(
                     cfg.clone(),
+                    handle.clone(),
+                    wow_path_str,
                     raw_tx,
                     raw_rx,
                     event_tx,
@@ -90,10 +109,10 @@ pub fn run() {
 }
 
 /// Spawns all async pipeline tasks.
-/// Called at startup if paths are configured, or from the settings window
-/// after first-run setup via a Tauri command (Phase 1 enhancement).
 fn start_pipeline(
     cfg: config::AppConfig,
+    app_handle: tauri::AppHandle,
+    wow_path_str: String,
     raw_tx: mpsc::Sender<String>,
     raw_rx: mpsc::Receiver<String>,
     event_tx: mpsc::Sender<parser::LogEvent>,
@@ -106,8 +125,13 @@ fn start_pipeline(
     let wow_log_path  = cfg.wow_log_path.clone();
     let addon_sv_path = cfg.addon_sv_path.clone();
 
-    tauri::async_runtime::spawn(tailer::run(wow_log_path, raw_tx));
+    tauri::async_runtime::spawn(tailer::run(
+        wow_log_path,
+        raw_tx,
+        app_handle.clone(),
+        wow_path_str,
+    ));
     tauri::async_runtime::spawn(parser::run(raw_rx, event_tx));
-    tauri::async_runtime::spawn(identity::run(addon_sv_path, id_tx));
+    tauri::async_runtime::spawn(identity::run(addon_sv_path, id_tx, app_handle));
     tauri::async_runtime::spawn(engine::run(event_rx, id_rx, advice_tx, snap_tx, cfg));
 }
