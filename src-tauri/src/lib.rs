@@ -8,8 +8,7 @@ mod rules;
 mod state;
 mod tailer;
 
-use tauri::{Emitter, Manager};
-use tauri::dpi::{PhysicalPosition, PhysicalSize};
+use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tokio::sync::mpsc;
 
 pub fn run() {
