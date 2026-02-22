@@ -18,6 +18,7 @@ use tokio::sync::mpsc::Receiver;
 pub const EVENT_ADVICE:     &str = "coach:advice";
 pub const EVENT_STATE:      &str = "coach:state";
 pub const EVENT_CONNECTION: &str = "coach:connection";
+#[allow(dead_code)] // used by TypeScript listener; emitted in future identity phase
 pub const EVENT_IDENTITY:   &str = "coach:identity";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ pub async fn run(
 
 /// Convenience function — emit a connection status update from anywhere
 /// that has an AppHandle (e.g., tailer on connect/disconnect).
+#[allow(dead_code)] // called by tailer/identity watcher in future phases
 pub fn emit_connection(handle: &AppHandle, status: &ConnectionStatus) {
     if let Err(e) = handle.emit(EVENT_CONNECTION, status) {
         tracing::warn!("Failed to emit connection status: {}", e);

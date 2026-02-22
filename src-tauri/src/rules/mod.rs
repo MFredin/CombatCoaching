@@ -12,6 +12,7 @@ use crate::{
 /// Read-only context passed to every rule evaluator.
 pub struct RuleContext<'a> {
     pub state:    &'a CombatState,
+    #[allow(dead_code)] // used by spec-aware rules in future phases
     pub identity: &'a PlayerIdentity,
     /// Coaching intensity from user settings (1 = quiet, 5 = aggressive)
     pub intensity: u8,

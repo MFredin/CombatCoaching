@@ -3,13 +3,21 @@ name: Build & Release
 on:
   push:
     tags:
-      - "v*"           # Trigger on version tags: v0.1.0, v1.0.0, etc.
+      - "v*"           # Trigger build+release on version tags: v0.1.0, v1.0.0, etc.
+    branches:
+      - main           # Trigger unit tests on every push to main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:   # Allow manual triggering from the GitHub UI
 
 jobs:
   build-windows:
     name: Build Windows Installer
     runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write   # required for softprops/action-gh-release to create releases
 
     steps:
       # -----------------------------------------------------------------------

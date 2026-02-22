@@ -88,6 +88,7 @@ impl LogEvent {
     }
 
     /// GUID of the entity that performed this action, if any.
+    #[allow(dead_code)] // used by engine filter in future phases
     pub fn source_guid(&self) -> Option<&str> {
         match self {
             Self::SpellDamage      { source_guid, .. } => Some(source_guid),
@@ -100,6 +101,7 @@ impl LogEvent {
     }
 
     /// GUID of the entity on the receiving end of this event, if any.
+    #[allow(dead_code)] // used by engine filter in future phases
     pub fn dest_guid(&self) -> Option<&str> {
         match self {
             Self::SpellDamage      { dest_guid, .. } => Some(dest_guid),
@@ -176,8 +178,8 @@ pub fn parse_line(raw: &str) -> Option<LogEvent> {
         "SPELL_DAMAGE" | "SPELL_PERIODIC_DAMAGE" | "RANGE_DAMAGE" => {
             let spell_id:  u32 = f.get(10)?.parse().ok()?;
             let spell_name     = unquote(f.get(11)?).to_owned();
-            // Field [15] = actual damage after absorbs/resists
-            let amount:    u64 = f.get(15)?.parse().ok()?;
+            // Field layout after school [12]: [13]=missType, [14]=amount, [15]=overkill, ...
+            let amount:    u64 = f.get(14)?.parse().ok()?;
             Some(LogEvent::SpellDamage { timestamp_ms: ts, source_guid: src_guid, source_name: src_name, dest_guid: dst_guid, dest_name: dst_name, spell_id, spell_name, amount })
         }
         "SWING_DAMAGE" => {

@@ -45,6 +45,7 @@ impl PlayerIdentity {
         }
     }
 
+    #[allow(dead_code)] // used by engine player-filter in future phases
     pub fn is_known(&self) -> bool {
         !self.guid.is_empty()
     }

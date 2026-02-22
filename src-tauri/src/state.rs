@@ -17,6 +17,7 @@ pub enum PullOutcome {
 
 #[derive(Debug, Clone)]
 pub struct Pull {
+    #[allow(dead_code)] // used by pull history display in future phases
     pub pull_number: u32,
     pub start_ms:    u64,
     pub end_ms:      Option<u64>,
@@ -30,6 +31,7 @@ pub struct Pull {
 #[derive(Debug, Clone)]
 pub struct WindowedEvent {
     pub timestamp_ms: u64,
+    #[allow(dead_code)] // accessed by timeline rule in future phases
     pub event:        LogEvent,
 }
 
@@ -99,6 +101,7 @@ impl CooldownTracker {
     }
 
     /// How long ago was this spell last cast? None = never seen this pull.
+    #[allow(dead_code)] // used by cooldown-drift rule in future phases
     pub fn elapsed_since_last(&self, spell_id: u32, now_ms: u64) -> Option<u64> {
         self.last_used.get(&spell_id).map(|&t| now_ms.saturating_sub(t))
     }

@@ -195,11 +195,37 @@ pub async fn run(logs_dir: PathBuf, tx: Sender<String>) -> Result<()> {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::sync::mpsc as std_mpsc;
     use tempfile::tempdir;
-    use tokio::sync::mpsc;
 
-    #[tokio::test]
-    async fn reads_initial_lines() {
+    // read_new_lines() is entirely synchronous — it uses blocking_send() which
+    // must NOT be called from inside a tokio runtime.  We use a std::sync::mpsc
+    // channel here so these are plain synchronous tests with no runtime at all.
+    fn make_channel() -> (tokio::sync::mpsc::Sender<String>, std_mpsc::Receiver<String>) {
+        // Bridge: tokio sender (what TailerState expects) → std receiver for assertions.
+        let (tok_tx, mut tok_rx) = tokio::sync::mpsc::channel::<String>(64);
+        let (std_tx, std_rx)     = std_mpsc::sync_channel::<String>(64);
+
+        // Drain the tokio channel into the std channel synchronously.
+        // We do this lazily by spinning a thread that forwards messages.
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            rt.block_on(async move {
+                while let Some(msg) = tok_rx.recv().await {
+                    if std_tx.send(msg).is_err() {
+                        break;
+                    }
+                }
+            });
+        });
+
+        (tok_tx, std_rx)
+    }
+
+    #[test]
+    fn reads_initial_lines() {
         let dir = tempdir().unwrap();
         let log_path = dir.path().join("WoWCombatLog.txt");
         let mut f = std::fs::File::create(&log_path).unwrap();
@@ -207,17 +233,16 @@ mod tests {
         writeln!(f, "line two").unwrap();
         f.flush().unwrap();
 
-        let (tx, mut rx) = mpsc::channel(16);
+        let (tx, rx) = make_channel();
         let mut state = TailerState::new(dir.path().to_path_buf());
         state.read_new_lines(&tx).unwrap();
 
-        assert_eq!(rx.try_recv().unwrap(), "line one");
-        assert_eq!(rx.try_recv().unwrap(), "line two");
+        assert_eq!(rx.recv().unwrap(), "line one");
+        assert_eq!(rx.recv().unwrap(), "line two");
     }
 
-    #[tokio::test]
-    async fn detects_rotation() {
-        // Use a NamedTempFile in a known directory so TailerState can find it
+    #[test]
+    fn detects_rotation() {
         let dir = tempdir().unwrap();
         let log_path = dir.path().join("WoWCombatLog.txt");
 
@@ -227,10 +252,10 @@ mod tests {
             f.flush().unwrap();
         }
 
-        let (tx, mut rx) = mpsc::channel(16);
+        let (tx, rx) = make_channel();
         let mut state = TailerState::new(dir.path().to_path_buf());
         state.read_new_lines(&tx).unwrap();
-        let _ = rx.try_recv(); // consume "original content"
+        let _ = rx.recv(); // consume "original content"
 
         // Simulate rotation: overwrite with shorter content
         {
@@ -240,11 +265,11 @@ mod tests {
         }
 
         state.read_new_lines(&tx).unwrap();
-        assert_eq!(rx.try_recv().unwrap(), "new");
+        assert_eq!(rx.recv().unwrap(), "new");
     }
 
-    #[tokio::test]
-    async fn switches_to_newer_log_file() {
+    #[test]
+    fn switches_to_newer_log_file() {
         let dir = tempdir().unwrap();
 
         // Create the "old" log
@@ -255,10 +280,10 @@ mod tests {
             f.flush().unwrap();
         }
 
-        let (tx, mut rx) = mpsc::channel(16);
+        let (tx, rx) = make_channel();
         let mut state = TailerState::new(dir.path().to_path_buf());
         state.read_new_lines(&tx).unwrap();
-        assert_eq!(rx.try_recv().unwrap(), "old line");
+        assert_eq!(rx.recv().unwrap(), "old line");
 
         // WoW creates a newer log
         let new_path = dir.path().join("WoWCombatLog_2024_06_15_195432.txt");
@@ -272,23 +297,23 @@ mod tests {
         state.check_for_new_log();
         state.read_new_lines(&tx).unwrap();
 
-        assert_eq!(rx.try_recv().unwrap(), "new line");
+        assert_eq!(rx.recv().unwrap(), "new line");
         // Confirm we really switched
         assert_eq!(state.active_file.as_deref(), Some(new_path.as_path()));
     }
 
     /// Regression: tailer should not panic or error when the directory has no
     /// combat log yet (e.g. player hasn't enabled /combatlog).
-    #[tokio::test]
-    async fn handles_empty_logs_dir_gracefully() {
+    #[test]
+    fn handles_empty_logs_dir_gracefully() {
         let dir = tempdir().unwrap();
-        // Put an unrelated file in there
         std::fs::File::create(dir.path().join("addon_errors.txt")).unwrap();
 
-        let (tx, mut rx) = mpsc::channel(16);
+        let (tx, rx) = make_channel();
         let mut state = TailerState::new(dir.path().to_path_buf());
-        // Should not error
         state.read_new_lines(&tx).unwrap();
+        // Give the forwarding thread a moment, then confirm nothing arrived
+        std::thread::sleep(std::time::Duration::from_millis(50));
         assert!(rx.try_recv().is_err()); // nothing emitted
     }
 }
