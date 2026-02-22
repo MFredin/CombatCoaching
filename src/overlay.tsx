@@ -2,7 +2,7 @@
 // Renders absolutely-positioned coaching panels using stored config positions.
 // This window is always-on-top and click-through (set_ignore_cursor_events on Rust side).
 // Layout editing happens in the SETTINGS window — this just reads saved positions.
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { NowFeed }      from "./components/NowFeed";

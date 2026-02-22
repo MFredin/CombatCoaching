@@ -5,6 +5,7 @@
 // AppConfig and the overlay reads them on next load.
 //
 // Uses @dnd-kit/core for drag behavior.
+import React from "react";
 import {
   DndContext,
   useDraggable,
