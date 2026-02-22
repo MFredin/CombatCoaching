@@ -21,6 +21,7 @@ export interface StateSnapshot {
   gcd_gap_ms:      number;
   avoidable_count: number;
   in_combat:       boolean;
+  interrupt_count: number;
 }
 
 export interface PlayerIdentity {

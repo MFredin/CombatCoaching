@@ -41,7 +41,7 @@ function SettingsApp() {
   // Live Feed state
   const [advice, setAdvice]           = useState<AdviceEvent[]>([]);
   const [snapshot, setSnapshot]       = useState<StateSnapshot>({
-    pull_elapsed_ms: 0, gcd_gap_ms: 0, avoidable_count: 0, in_combat: false,
+    pull_elapsed_ms: 0, gcd_gap_ms: 0, avoidable_count: 0, in_combat: false, interrupt_count: 0,
   });
   const [eventCount, setEventCount]   = useState(0);
   const [overlayOn, setOverlayOn]     = useState(true);
@@ -173,7 +173,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v0.8.2
+            Live Coach v0.8.5
           </div>
         </div>
 
@@ -437,6 +437,9 @@ function LiveFeedTab({ advice, snapshot, eventCount, connStatus }: LiveFeedTabPr
           value={snapshot.gcd_gap_ms > 0 ? `${snapshot.gcd_gap_ms} ms` : "—"} />
         <StatBlock label="Avoidable hits"
           value={snapshot.avoidable_count.toString()} />
+        <StatBlock label="Interrupts"
+          value={snapshot.interrupt_count.toString()}
+          color={snapshot.interrupt_count > 0 ? "var(--good)" : undefined} />
 
         <SectionHeader style={{ marginTop: 16 }}>Feed</SectionHeader>
         <StatBlock label="Cards shown"  value={advice.length.toString()} />

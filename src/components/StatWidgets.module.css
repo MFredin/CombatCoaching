@@ -1,8 +1,8 @@
 .row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
-  min-width: 240px;
+  min-width: 320px;
 }
 
 .spark {
@@ -15,6 +15,7 @@
 
 .spark.warn { border-color: rgba(255, 204, 102, 0.5); }
 .spark.bad  { border-color: rgba(255, 92, 119, 0.5);  }
+.spark.good { border-color: rgba(43, 213, 118, 0.5);  }
 
 .big {
   font-size: 20px;
@@ -25,6 +26,7 @@
 
 .spark.warn .big { color: var(--warn); }
 .spark.bad  .big { color: var(--bad);  }
+.spark.good .big { color: var(--good); }
 
 .small {
   font-size: 11px;

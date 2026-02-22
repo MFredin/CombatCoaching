@@ -146,27 +146,30 @@ impl GcdTracker {
 
 #[derive(Debug)]
 pub struct CombatState {
-    pub current_pull:  Option<Pull>,
-    pub pull_history:  Vec<Pull>,
-    pub event_window:  EventWindow,
-    pub avoidable:     AvoidableTracker,
-    pub cooldowns:     CooldownTracker,
-    pub gcd:           GcdTracker,
-    pub in_combat:     bool,
-    pub player_guid:   Option<String>,
+    pub current_pull:    Option<Pull>,
+    pub pull_history:    Vec<Pull>,
+    pub event_window:    EventWindow,
+    pub avoidable:       AvoidableTracker,
+    pub cooldowns:       CooldownTracker,
+    pub gcd:             GcdTracker,
+    pub in_combat:       bool,
+    pub player_guid:     Option<String>,
+    /// Number of successful interrupts cast by the coached player this pull.
+    pub interrupt_count: u32,
 }
 
 impl CombatState {
     pub fn new() -> Self {
         Self {
-            current_pull:  None,
-            pull_history:  Vec::new(),
-            event_window:  EventWindow::new(30_000),
-            avoidable:     AvoidableTracker::default(),
-            cooldowns:     CooldownTracker::default(),
-            gcd:           GcdTracker::default(),
-            in_combat:     false,
-            player_guid:   None,
+            current_pull:    None,
+            pull_history:    Vec::new(),
+            event_window:    EventWindow::new(30_000),
+            avoidable:       AvoidableTracker::default(),
+            cooldowns:       CooldownTracker::default(),
+            gcd:             GcdTracker::default(),
+            in_combat:       false,
+            player_guid:     None,
+            interrupt_count: 0,
         }
     }
 
@@ -181,6 +184,7 @@ impl CombatState {
         self.avoidable.reset();
         self.cooldowns.reset();
         self.gcd.reset();
+        self.interrupt_count = 0;
         self.in_combat = true;
         tracing::info!("Pull {} started at {}ms", n, timestamp_ms);
     }

@@ -110,8 +110,8 @@ pub fn run() {
             let (snap_tx, snap_rx)     = mpsc::channel::<ipc::StateSnapshot>(128);
 
             // --- SQLite ---
-            let db_path = app.path().app_data_dir()?.join("sessions.sqlite");
-            let _db = db::init(db_path)?;
+            let db_path  = app.path().app_data_dir()?.join("sessions.sqlite");
+            let db_writer = db::spawn_db_writer(&db_path)?;
 
             let handle = app.handle().clone();
 
@@ -131,6 +131,7 @@ pub fn run() {
                     id_tx,
                     id_rx,
                     snap_tx,
+                    db_writer,
                 );
             } else {
                 tracing::info!("No WoW path configured — waiting for first-run setup");
@@ -175,6 +176,7 @@ fn start_pipeline(
     id_tx: mpsc::Sender<identity::PlayerIdentity>,
     id_rx: mpsc::Receiver<identity::PlayerIdentity>,
     snap_tx: mpsc::Sender<ipc::StateSnapshot>,
+    db_writer: db::DbWriter,
 ) {
     let wow_log_path  = cfg.wow_log_path.clone();
     let addon_sv_path = cfg.addon_sv_path.clone();
@@ -187,7 +189,7 @@ fn start_pipeline(
     ));
     tauri::async_runtime::spawn(parser::run(raw_rx, event_tx));
     tauri::async_runtime::spawn(identity::run(addon_sv_path, id_tx, app_handle));
-    tauri::async_runtime::spawn(engine::run(event_rx, id_rx, advice_tx, snap_tx, cfg));
+    tauri::async_runtime::spawn(engine::run(event_rx, id_rx, advice_tx, snap_tx, cfg, db_writer));
 }
 
 // ---------------------------------------------------------------------------

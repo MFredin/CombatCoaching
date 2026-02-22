@@ -2,7 +2,7 @@
 ///
 /// Receives typed LogEvents and PlayerIdentity updates via channels,
 /// maintains CombatState, evaluates rules, deduplicates advice, and
-/// forwards AdviceEvents to the IPC layer.
+/// forwards AdviceEvents to the IPC layer and SQLite DB.
 ///
 /// Per-rule advice cooldowns prevent spam:
 ///   bad    → 8s minimum between firings of the same key
@@ -10,6 +10,7 @@
 ///   good   → 20s
 use crate::{
     config::AppConfig,
+    db::DbWriter,
     identity::PlayerIdentity,
     ipc::StateSnapshot,
     parser::LogEvent,
@@ -56,19 +57,27 @@ fn advice_cooldown_ms(severity: &Severity) -> u64 {
 }
 
 struct EngineState {
-    combat:           CombatState,
-    identity:         PlayerIdentity,
-    config:           AppConfig,
-    advice_last_ms:   HashMap<String, u64>,
+    combat:          CombatState,
+    identity:        PlayerIdentity,
+    config:          AppConfig,
+    advice_last_ms:  HashMap<String, u64>,
+    db:              DbWriter,
+    session_id:      i64,
+    current_pull_id: Option<i64>,
+    pull_number:     u32,
 }
 
 impl EngineState {
-    fn new(config: AppConfig) -> Self {
+    fn new(config: AppConfig, db: DbWriter, session_id: i64) -> Self {
         Self {
-            combat:         CombatState::new(),
-            identity:       PlayerIdentity::unknown(),
+            combat:          CombatState::new(),
+            identity:        PlayerIdentity::unknown(),
             config,
-            advice_last_ms: HashMap::new(),
+            advice_last_ms:  HashMap::new(),
+            db,
+            session_id,
+            current_pull_id: None,
+            pull_number:     0,
         }
     }
 
@@ -93,8 +102,21 @@ pub async fn run(
     advice_tx:     Sender<AdviceEvent>,
     snap_tx:       Sender<StateSnapshot>,
     config:        AppConfig,
+    db:            DbWriter,
 ) -> Result<()> {
-    let mut eng = EngineState::new(config);
+    // Insert a session row before entering the hot loop.
+    // Player name/GUID will be empty until the addon identity arrives — that's fine.
+    let session_start_ms = unix_now_ms();
+    let session_id = db
+        .insert_session(session_start_ms, String::new(), String::new())
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("DB insert_session failed: {}", e);
+            -1
+        });
+    tracing::info!("DB session {} started", session_id);
+
+    let mut eng = EngineState::new(config, db, session_id);
 
     loop {
         tokio::select! {
@@ -109,8 +131,36 @@ pub async fn run(
             Some(event) = event_rx.recv() => {
                 let now_ms = event.timestamp_ms();
 
+                // Snapshot in_combat before state mutation to detect transitions
+                let was_in_combat = eng.combat.in_combat;
+
                 // Update the combat state machine for every event
                 update_state(&mut eng.combat, &event, now_ms);
+
+                // ── Pull start ──────────────────────────────────────────────
+                if !was_in_combat && eng.combat.in_combat {
+                    eng.pull_number += 1;
+                    let pn  = eng.pull_number;
+                    let sid = eng.session_id;
+                    match eng.db.insert_pull(sid, pn, now_ms).await {
+                        Ok(id) => {
+                            tracing::info!("DB pull {} started (id={})", pn, id);
+                            eng.current_pull_id = Some(id);
+                        }
+                        Err(e) => tracing::warn!("DB insert_pull failed: {}", e),
+                    }
+                }
+
+                // ── Pull end ────────────────────────────────────────────────
+                if was_in_combat && !eng.combat.in_combat {
+                    if let Some(pull_id) = eng.current_pull_id.take() {
+                        let outcome = eng.combat.pull_history.last()
+                            .and_then(|p| p.outcome.as_ref())
+                            .map(|o| format!("{:?}", o).to_lowercase())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        eng.db.end_pull(pull_id, now_ms, outcome);
+                    }
+                }
 
                 // Only run coaching rules for events involving the coached player
                 let coached = is_coached_event(&event, &eng.combat.player_guid);
@@ -132,6 +182,18 @@ pub async fn run(
                     for advice in candidates {
                         if eng.can_fire(&advice.key, &advice.severity, now_ms) {
                             eng.mark_fired(&advice.key, now_ms);
+
+                            // Persist to DB (fire-and-forget; no pull_id needed for orphaned advice)
+                            if let Some(pull_id) = eng.current_pull_id {
+                                eng.db.insert_advice(
+                                    pull_id,
+                                    now_ms,
+                                    advice.key.clone(),
+                                    format!("{:?}", advice.severity).to_lowercase(),
+                                    advice.message.clone(),
+                                );
+                            }
+
                             if advice_tx.send(advice).await.is_err() {
                                 return Ok(());
                             }
@@ -145,6 +207,7 @@ pub async fn run(
                     gcd_gap_ms:      eng.combat.gcd.current_gap_ms,
                     avoidable_count: eng.combat.avoidable.total_hits(),
                     in_combat:       eng.combat.in_combat,
+                    interrupt_count: eng.combat.interrupt_count,
                 };
                 let _ = snap_tx.try_send(snap); // Non-blocking — drop if UI is slow
             }
@@ -206,8 +269,26 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
             }
         }
 
+        LogEvent::SpellInterrupted { source_guid, .. } => {
+            if Some(source_guid.as_str()) == state.player_guid.as_deref() {
+                state.interrupt_count += 1;
+            }
+            state.event_window.push(event.clone(), now_ms);
+        }
+
         _ => {
             state.event_window.push(event.clone(), now_ms);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn unix_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }

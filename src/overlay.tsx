@@ -2,7 +2,7 @@
 // Renders absolutely-positioned coaching panels using stored config positions.
 // This window is always-on-top and click-through (set_ignore_cursor_events on Rust side).
 // Layout editing happens in the SETTINGS window — this just reads saved positions.
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { NowFeed }      from "./components/NowFeed";
@@ -12,6 +12,7 @@ import { PullClock }    from "./components/PullClock";
 import { useTauriEvents } from "./hooks/useTauriEvents";
 import type {
   AdviceEvent,
+  AudioCue,
   StateSnapshot,
   AppConfig,
   PanelPosition,
@@ -22,20 +23,75 @@ const MAX_CARDS  = 3;
 const CARD_TTL   = 30_000; // ms — cards vanish after 30 seconds
 const WINDOW_MS  = 30_000;
 
+// ---------------------------------------------------------------------------
+// Audio cue playback — Web Audio API, no external dependencies.
+// A single AudioContext is reused across calls to avoid the browser's
+// per-page context limit. Resume is called before each beep because the
+// context may be suspended until the first user gesture (or auto-resumed
+// by the WebView2 desktop app context).
+// ---------------------------------------------------------------------------
+let _audioCtx: AudioContext | null = null;
+
+function getAudioCtx(): AudioContext {
+  if (!_audioCtx || _audioCtx.state === "closed") {
+    _audioCtx = new AudioContext();
+  }
+  return _audioCtx;
+}
+
+function playAudioCue(severity: string, cues: AudioCue[]): void {
+  const cue = cues.find((c) => c.severity === severity);
+  if (!cue?.enabled) return;
+
+  try {
+    const ctx = getAudioCtx();
+    const play = () => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.value     = Math.max(0, Math.min(1, cue.volume));
+      osc.frequency.value = severity === "good" ? 880 : severity === "warn" ? 660 : 440;
+      osc.type            = "sine";
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+      osc.onended = () => {};
+    };
+    // Resume context if suspended (WebView2 may suspend until first interaction)
+    if (ctx.state === "suspended") {
+      ctx.resume().then(play).catch(() => {});
+    } else {
+      play();
+    }
+  } catch {
+    // Audio not available — silently ignore
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Overlay app
+// ---------------------------------------------------------------------------
+
 function OverlayApp() {
-  const [advice, setAdvice]         = useState<AdviceEvent[]>([]);
-  const [snapshot, setSnapshot]     = useState<StateSnapshot>({
+  const [advice, setAdvice]     = useState<AdviceEvent[]>([]);
+  const [snapshot, setSnapshot] = useState<StateSnapshot>({
     pull_elapsed_ms: 0,
     gcd_gap_ms:      0,
     avoidable_count: 0,
     in_combat:       false,
+    interrupt_count: 0,
   });
-  const [panels, setPanels]         = useState<PanelPosition[]>([]);
+  const [panels, setPanels] = useState<PanelPosition[]>([]);
+  // Audio cues kept in a ref — no re-renders needed when config reloads
+  const audioCuesRef = useRef<AudioCue[]>([]);
 
-  // Load panel positions from config on mount
+  // Load panel positions and audio config from config on mount
   useEffect(() => {
     invoke<AppConfig>("get_config")
-      .then((cfg) => setPanels(cfg.panel_positions ?? []))
+      .then((cfg) => {
+        setPanels(cfg.panel_positions ?? []);
+        audioCuesRef.current = cfg.audio_cues ?? [];
+      })
       .catch(() => {}); // No config yet — panels use default positions
   }, []);
 
@@ -47,6 +103,8 @@ function OverlayApp() {
         const filtered = prev.filter((a) => a.key !== incoming.key);
         return [incoming, ...filtered].slice(0, MAX_CARDS);
       });
+      // Play audio cue for this severity
+      playAudioCue(incoming.severity, audioCuesRef.current);
     }, []),
 
     onStateSnapshot: useCallback((snap: StateSnapshot) => {
@@ -84,6 +142,7 @@ function OverlayApp() {
         <StatWidgets
           gcdGapMs={snapshot.gcd_gap_ms}
           avoidableCount={snapshot.avoidable_count}
+          interruptCount={snapshot.interrupt_count}
         />
       </AbsPanel>
     </>

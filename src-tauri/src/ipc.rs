@@ -33,6 +33,8 @@ pub struct StateSnapshot {
     pub gcd_gap_ms:      u64,
     pub avoidable_count: u32,
     pub in_combat:       bool,
+    /// Successful interrupts cast by the coached player this pull.
+    pub interrupt_count: u32,
 }
 
 /// Connection/health status — sent when tailing starts/stops or identity changes.
