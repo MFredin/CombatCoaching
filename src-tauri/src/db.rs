@@ -49,7 +49,6 @@ pub enum DbCommand {
         severity: String,
         message:  String,
     },
-    Shutdown,
 }
 
 // ---------------------------------------------------------------------------
@@ -233,8 +232,6 @@ fn db_writer_loop(rx: std::sync::mpsc::Receiver<DbCommand>, conn: Connection) {
                     tracing::warn!("DB insert_advice error: {}", e);
                 }
             }
-
-            DbCommand::Shutdown => break,
         }
     }
 }

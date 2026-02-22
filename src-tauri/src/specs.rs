@@ -38,6 +38,7 @@ struct TomlSpecMeta {
     spec:              String,
     role:              String,
     #[serde(default)]
+    #[allow(dead_code)]
     description:       String,
     cooldowns:         TomlCooldowns,
     active_mitigation: Option<TomlActiveMitigation>,

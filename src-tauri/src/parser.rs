@@ -125,6 +125,7 @@ impl LogEvent {
     }
 
     /// GUID of the entity that performed this action, if any.
+    #[allow(dead_code)]
     pub fn source_guid(&self) -> Option<&str> {
         match self {
             Self::SpellDamage      { source_guid, .. } => Some(source_guid),
@@ -141,6 +142,7 @@ impl LogEvent {
     }
 
     /// GUID of the entity on the receiving end of this event, if any.
+    #[allow(dead_code)]
     pub fn dest_guid(&self) -> Option<&str> {
         match self {
             Self::SpellDamage      { dest_guid, .. }   => Some(dest_guid),
