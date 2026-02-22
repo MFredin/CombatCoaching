@@ -15,6 +15,7 @@
   border: 1px solid var(--stroke);
   border-radius: 8px;
   overflow: hidden;
+  flex-shrink: 0;
   /* Faint grid to suggest screen area */
   background-image:
     linear-gradient(rgba(34,48,79,0.3) 1px, transparent 1px),
@@ -23,84 +24,105 @@
 }
 
 .handle {
-  display: flex;
+  position: absolute;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  background: rgba(124, 92, 255, 0.2);
-  border: 1px solid rgba(124, 92, 255, 0.5);
-  border-radius: 6px;
-  padding: 3px 7px;
-  cursor: default;
-  user-select: none;
-  white-space: nowrap;
+  justify-content: center;
+  border-radius: 5px;
+  padding: 3px 8px;
   font-size: 11px;
+  font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid rgba(255,255,255,0.15);
 }
 
-.grip {
-  cursor: grab;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1;
-}
-
-.grip:active { cursor: grabbing; }
-
-.handleLabel { font-size: 11px; }
-
-.eye {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  font-size: 12px;
-  line-height: 1;
-  opacity: 0.7;
-}
-.eye:hover { opacity: 1; }
-
-/* Per-panel detail controls below the canvas */
+/* ── Per-panel detail controls ── */
 .panelControls {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-top: 4px;
 }
 
 .panelRow {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--stroke);
-  border-radius: 6px;
+  border-radius: 8px;
+}
+
+.panelRowHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .panelRowLabel {
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
-  min-width: 80px;
+  flex: 1;
 }
 
+.eye {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.75;
+}
+.eye:hover { opacity: 1; }
+
+/* X / Y number inputs */
+.xyRow {
+  display: flex;
+  gap: 12px;
+}
+
+.xyLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.xyInput {
+  width: 72px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  text-align: right;
+}
+
+/* Opacity / Scale sliders */
 .sliderLabel {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 11px;
   color: var(--muted);
+  margin: 0;
 }
 
 .slider {
-  width: 90px;
+  flex: 1;
   accent-color: var(--accent, #7c5cff);
   cursor: pointer;
+  padding: 0 !important;
+  width: auto !important;
 }
 
 .sliderValue {
   font-size: 11px;
   color: var(--text);
-  min-width: 32px;
+  min-width: 34px;
   text-align: right;
 }

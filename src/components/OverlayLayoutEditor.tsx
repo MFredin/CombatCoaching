@@ -1,24 +1,20 @@
-// Drag-and-drop overlay layout editor — lives in the SETTINGS window only.
+// Overlay layout editor — lives in the SETTINGS window only.
 //
-// Renders a scaled-down preview canvas (30% of 1920×1080) with draggable
-// panel handles. The user positions panels here; positions are saved to
-// AppConfig and the overlay reads them on next load.
+// Shows a scaled-down preview canvas (30% of 1920×1080) with static panel
+// handles and per-panel controls for X, Y, visibility, opacity, and scale.
 //
-// Uses @dnd-kit/core for drag behavior.
+// @dnd-kit intentionally removed — it bundled a second copy of React which
+// caused React error #310 (invalid hook call) in the production build.
+// Drag-and-drop will be re-added in a future release once the dependency
+// conflict is resolved. For now X/Y are set via number inputs.
 import React from "react";
-import {
-  DndContext,
-  useDraggable,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import type { PanelPosition } from "../types/events";
 import styles from "./OverlayLayoutEditor.module.css";
 
 // Scale: editor canvas width / real screen width
-const SCALE  = 0.30;
-const W      = Math.round(1920 * SCALE); // 576px
-const H      = Math.round(1080 * SCALE); // 324px
+const SCALE = 0.30;
+const W     = Math.round(1920 * SCALE); // 576 px
+const H     = Math.round(1080 * SCALE); // 324 px
 
 const PANEL_LABELS: Record<string, string> = {
   pull_clock:   "Pull Clock",
@@ -27,80 +23,101 @@ const PANEL_LABELS: Record<string, string> = {
   stat_widgets: "Stats",
 };
 
+const PANEL_COLORS: Record<string, string> = {
+  pull_clock:   "rgba(124, 92,255,0.55)",
+  now_feed:     "rgba( 43,213,118,0.45)",
+  timeline:     "rgba(255,204,102,0.45)",
+  stat_widgets: "rgba(255, 92,119,0.45)",
+};
+
 interface Props {
   positions:        PanelPosition[];
   onPositionChange: (updated: PanelPosition[]) => void;
 }
 
 export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
-  function handleDragEnd(e: DragEndEvent) {
-    const { active, delta } = e;
-    const id = active.id as string;
-
+  function patch(id: string, changes: Partial<PanelPosition>) {
     onPositionChange(
-      positions.map((p) => {
-        if (p.id !== id) return p;
-        // Convert scaled pixel delta back to real screen coordinates
-        return {
-          ...p,
-          x: Math.max(0, Math.round(p.x + delta.x / SCALE)),
-          y: Math.max(0, Math.round(p.y + delta.y / SCALE)),
-        };
-      })
-    );
-  }
-
-  function toggleVisible(id: string) {
-    onPositionChange(
-      positions.map((p) => (p.id === id ? { ...p, visible: !p.visible } : p))
-    );
-  }
-
-  function setOpacity(id: string, opacity: number) {
-    onPositionChange(
-      positions.map((p) => (p.id === id ? { ...p, opacity } : p))
-    );
-  }
-
-  function setPanelScale(id: string, scale: number) {
-    onPositionChange(
-      positions.map((p) => (p.id === id ? { ...p, scale } : p))
+      positions.map((p) => (p.id === id ? { ...p, ...changes } : p))
     );
   }
 
   return (
     <div className={styles.wrap}>
+      {/* ── Preview canvas ── */}
       <div className={styles.hint}>
-        Drag panels to reposition. Use the controls below to adjust visibility, opacity, and scale.
+        Preview (30 % scale — 576 × 324 px represents 1920 × 1080).
+        Set exact pixel positions using the X / Y inputs below.
       </div>
-      <DndContext onDragEnd={handleDragEnd}>
-        <div className={styles.canvas} style={{ width: W, height: H }}>
-          {positions.map((p) => (
-            <DraggableHandle
-              key={p.id}
-              position={p}
-              scale={SCALE}
-              label={PANEL_LABELS[p.id] ?? p.id}
-              onToggleVisible={() => toggleVisible(p.id)}
-            />
-          ))}
-        </div>
-      </DndContext>
 
-      {/* Per-panel detail controls below the canvas */}
+      <div className={styles.canvas} style={{ width: W, height: H }}>
+        {positions.map((p) => {
+          const left = Math.min(Math.max(0, p.x * SCALE), W - 4);
+          const top  = Math.min(Math.max(0, p.y * SCALE), H - 4);
+          return (
+            <div
+              key={p.id}
+              className={styles.handle}
+              style={{
+                left,
+                top,
+                opacity:    p.visible ? 1 : 0.3,
+                background: PANEL_COLORS[p.id] ?? "rgba(124,92,255,0.45)",
+                transform:  `scale(${p.scale ?? 1.0})`,
+                transformOrigin: "top left",
+              }}
+            >
+              {PANEL_LABELS[p.id] ?? p.id}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Per-panel controls ── */}
       <div className={styles.panelControls}>
         {positions.map((p) => (
           <div key={p.id} className={styles.panelRow}>
-            <span className={styles.panelRowLabel}>{PANEL_LABELS[p.id] ?? p.id}</span>
+            {/* Label + visibility toggle */}
+            <div className={styles.panelRowHeader}>
+              <span className={styles.panelRowLabel}>{PANEL_LABELS[p.id] ?? p.id}</span>
+              <button
+                className={styles.eye}
+                onClick={() => patch(p.id, { visible: !p.visible })}
+                title={p.visible ? "Hide panel" : "Show panel"}
+              >
+                {p.visible ? "👁" : "🚫"}
+              </button>
+            </div>
 
-            <button
-              className={styles.eye}
-              onClick={() => toggleVisible(p.id)}
-              title={p.visible ? "Hide panel" : "Show panel"}
-            >
-              {p.visible ? "👁" : "🚫"}
-            </button>
+            {/* X / Y position inputs */}
+            <div className={styles.xyRow}>
+              <label className={styles.xyLabel}>
+                X
+                <input
+                  type="number"
+                  min={0}
+                  max={1920}
+                  step={10}
+                  value={p.x}
+                  onChange={(e) => patch(p.id, { x: Math.max(0, Number(e.target.value)) })}
+                  className={styles.xyInput}
+                />
+              </label>
+              <label className={styles.xyLabel}>
+                Y
+                <input
+                  type="number"
+                  min={0}
+                  max={1080}
+                  step={10}
+                  value={p.y}
+                  onChange={(e) => patch(p.id, { y: Math.max(0, Number(e.target.value)) })}
+                  className={styles.xyInput}
+                />
+              </label>
+            </div>
 
+            {/* Opacity slider */}
             <label className={styles.sliderLabel}>
               Opacity
               <input
@@ -109,7 +126,7 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
                 max={1}
                 step={0.05}
                 value={p.opacity ?? 1.0}
-                onChange={(e) => setOpacity(p.id, parseFloat(e.target.value))}
+                onChange={(e) => patch(p.id, { opacity: parseFloat(e.target.value) })}
                 className={styles.slider}
               />
               <span className={styles.sliderValue}>
@@ -117,6 +134,7 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
               </span>
             </label>
 
+            {/* Scale slider */}
             <label className={styles.sliderLabel}>
               Scale
               <input
@@ -125,7 +143,7 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
                 max={2.0}
                 step={0.05}
                 value={p.scale ?? 1.0}
-                onChange={(e) => setPanelScale(p.id, parseFloat(e.target.value))}
+                onChange={(e) => patch(p.id, { scale: parseFloat(e.target.value) })}
                 className={styles.slider}
               />
               <span className={styles.sliderValue}>
@@ -135,45 +153,6 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-interface HandleProps {
-  position:        PanelPosition;
-  scale:           number;
-  label:           string;
-  onToggleVisible: () => void;
-}
-
-function DraggableHandle({ position, scale, label, onToggleVisible }: HandleProps) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: position.id,
-  });
-
-  const style: React.CSSProperties = {
-    position:  "absolute",
-    left:      position.x * scale,
-    top:       position.y * scale,
-    transform: CSS.Translate.toString(transform),
-    opacity:   position.visible ? 1 : 0.4,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} className={styles.handle}>
-      <div className={styles.grip} {...listeners} {...attributes}>
-        ⠿
-      </div>
-      <span className={styles.handleLabel}>{label}</span>
-      <button
-        className={styles.eye}
-        onClick={onToggleVisible}
-        title={position.visible ? "Hide panel" : "Show panel"}
-      >
-        {position.visible ? "👁" : "🚫"}
-      </button>
     </div>
   );
 }
