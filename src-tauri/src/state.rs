@@ -156,6 +156,8 @@ pub struct CombatState {
     pub player_guid:     Option<String>,
     /// Number of successful interrupts cast by the coached player this pull.
     pub interrupt_count: u32,
+    /// Active encounter name from ENCOUNTER_START/END (None between pulls).
+    pub encounter_name:  Option<String>,
 }
 
 impl CombatState {
@@ -170,6 +172,7 @@ impl CombatState {
             in_combat:       false,
             player_guid:     None,
             interrupt_count: 0,
+            encounter_name:  None,
         }
     }
 

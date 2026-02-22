@@ -80,6 +80,7 @@ function OverlayApp() {
     avoidable_count: 0,
     in_combat:       false,
     interrupt_count: 0,
+    encounter_name:  null,
   });
   const [panels, setPanels] = useState<PanelPosition[]>([]);
   // Audio cues kept in a ref — no re-renders needed when config reloads
@@ -127,7 +128,11 @@ function OverlayApp() {
   return (
     <>
       <AbsPanel pos={pos("pull_clock")}>
-        <PullClock elapsedMs={snapshot.pull_elapsed_ms} inCombat={snapshot.in_combat} />
+        <PullClock
+          elapsedMs={snapshot.pull_elapsed_ms}
+          inCombat={snapshot.in_combat}
+          encounterName={snapshot.encounter_name}
+        />
       </AbsPanel>
 
       <AbsPanel pos={pos("now_feed")}>

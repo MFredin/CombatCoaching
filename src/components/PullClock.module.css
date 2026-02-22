@@ -1,12 +1,18 @@
 .clock {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   background: rgba(11, 15, 24, 0.88);
   border: 1px solid var(--stroke);
   border-radius: 10px;
   padding: 6px 12px;
   width: fit-content;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .label {
@@ -26,4 +32,16 @@
 
 .active .time {
   color: var(--good);
+}
+
+.encounter {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

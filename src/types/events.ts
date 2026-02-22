@@ -22,6 +22,16 @@ export interface StateSnapshot {
   avoidable_count: number;
   in_combat:       boolean;
   interrupt_count: number;
+  /** Active encounter name from ENCOUNTER_START, or null between pulls. */
+  encounter_name?: string | null;
+}
+
+/** A spec profile available for selection. Mirrors specs::SpecInfo on the Rust side. */
+export interface SpecInfo {
+  key:   string;
+  class: string;
+  spec:  string;
+  role:  string;
 }
 
 export interface PlayerIdentity {
@@ -61,6 +71,7 @@ export interface AppConfig {
   player_focus?:    string;
   panel_positions?: PanelPosition[];
   major_cds?:       number[];
+  selected_spec?:   string;
   audio_cues?:      AudioCue[];
   hotkeys?:         HotkeyConfig;
   overlay_visible?: boolean;

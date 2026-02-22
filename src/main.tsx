@@ -13,6 +13,7 @@ import type {
   AdviceEvent,
   ConnectionStatus as ConnStatus,
   PanelPosition,
+  SpecInfo,
   StateSnapshot,
   UpdateInfo,
   WtfCharacter,
@@ -38,20 +39,24 @@ function SettingsApp() {
   const [wtfChars, setWtfChars]       = useState<WtfCharacter[]>([]);
   const [updateInfo, setUpdateInfo]   = useState<UpdateInfo | null>(null);
   const [updateChecking, setChecking] = useState(false);
+  // Spec profiles for the spec-selector dropdown
+  const [specs, setSpecs]             = useState<SpecInfo[]>([]);
   // Live Feed state
   const [advice, setAdvice]           = useState<AdviceEvent[]>([]);
   const [snapshot, setSnapshot]       = useState<StateSnapshot>({
-    pull_elapsed_ms: 0, gcd_gap_ms: 0, avoidable_count: 0, in_combat: false, interrupt_count: 0,
+    pull_elapsed_ms: 0, gcd_gap_ms: 0, avoidable_count: 0, in_combat: false,
+    interrupt_count: 0, encounter_name: null,
   });
   const [eventCount, setEventCount]   = useState(0);
   const [overlayOn, setOverlayOn]     = useState(true);
 
-  // Load config on mount
+  // Load config and spec list on mount
   useEffect(() => {
     invoke<AppConfig>("get_config").then((cfg) => {
       setConfig(cfg);
       setOverlayOn(cfg.overlay_visible ?? true);
     }).catch(console.error);
+    invoke<SpecInfo[]>("list_specs").then(setSpecs).catch(() => setSpecs([]));
   }, []);
 
   // Reload WTF character list when log path changes
@@ -136,6 +141,15 @@ function SettingsApp() {
     void save(updated);
   }
 
+  async function applySpec(specKey: string) {
+    try {
+      const updatedCfg = await invoke<AppConfig>("apply_spec", { specKey });
+      setConfig(updatedCfg);
+    } catch (e) {
+      console.error("apply_spec failed:", e);
+    }
+  }
+
   async function toggleOverlay() {
     const newVisible = await invoke<boolean>("toggle_overlay");
     setOverlayOn(newVisible);
@@ -173,7 +187,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v0.8.5
+            Live Coach v0.8.6
           </div>
         </div>
 
@@ -220,6 +234,7 @@ function SettingsApp() {
             detectMsg={detectMsg} updateInfo={updateInfo}
             updateChecking={updateChecking} checkForUpdates={checkForUpdates}
             intensityLabels={intensityLabels} updatePanels={updatePanels}
+            specs={specs} applySpec={applySpec}
           />
         )}
         {tab === "livefeed" && (
@@ -257,6 +272,8 @@ interface HomeTabProps {
   checkForUpdates: () => void;
   intensityLabels: Record<number, string>;
   updatePanels:    (p: PanelPosition[]) => void;
+  specs:           SpecInfo[];
+  applySpec:       (key: string) => Promise<void>;
 }
 
 function HomeTab({
@@ -264,6 +281,7 @@ function HomeTab({
   detectPath, browsePath, browseAddonPath, detectMsg,
   updateInfo, updateChecking, checkForUpdates,
   intensityLabels, updatePanels,
+  specs, applySpec,
 }: HomeTabProps) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", height: "100%" }}>
@@ -338,6 +356,30 @@ function HomeTab({
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
             {intensityLabels[config.intensity ?? 3] ?? ""}
           </div>
+        </div>
+
+        <div className="section">
+          <h3>Spec Profile</h3>
+          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
+            Selects cooldown spell IDs for the drift rule. Auto-detected if the addon is installed.
+          </div>
+          <select
+            value={config.selected_spec ?? ""}
+            onChange={(e) => void applySpec(e.target.value)}
+            style={{ width: "100%", fontSize: 12 }}
+          >
+            <option value="">— Auto (from addon) —</option>
+            {specs.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.class} — {s.spec} ({s.role})
+              </option>
+            ))}
+          </select>
+          {config.selected_spec && (
+            <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+              Active: {config.selected_spec}
+            </div>
+          )}
         </div>
 
         <div className="section">

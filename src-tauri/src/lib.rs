@@ -5,6 +5,7 @@ mod identity;
 mod ipc;
 mod parser;
 mod rules;
+mod specs;
 mod state;
 mod tailer;
 
@@ -156,6 +157,8 @@ pub fn run() {
             config::save_config,
             config::detect_wow_path,
             config::list_wtf_characters,
+            config::list_specs,
+            config::apply_spec,
             check_for_update,
             toggle_overlay,
         ])

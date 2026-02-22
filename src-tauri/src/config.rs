@@ -133,6 +133,11 @@ pub struct AppConfig {
     /// Whether the overlay is currently visible (persisted so it survives restart).
     #[serde(default = "bool_true")]
     pub overlay_visible: bool,
+
+    /// Explicitly-selected spec profile key (e.g. "PALADIN/Retribution").
+    /// Empty = auto-detect from the addon identity on first combat.
+    #[serde(default)]
+    pub selected_spec: String,
 }
 
 fn default_intensity() -> u8 { 3 }
@@ -158,6 +163,7 @@ impl Default for AppConfig {
             audio_cues:      default_audio_cues(),
             hotkeys:         HotkeyConfig::default(),
             overlay_visible: true,
+            selected_spec:   String::new(),
         }
     }
 }
@@ -374,6 +380,41 @@ pub fn list_wtf_characters(app_handle: tauri::AppHandle) -> Vec<WtfCharacter> {
     let chars = scan_wtf_characters(&cfg.wow_log_path);
     tracing::info!("WTF scan found {} characters", chars.len());
     chars
+}
+
+/// Returns all embedded spec profiles (for the settings UI dropdown).
+#[tauri::command]
+pub fn list_specs() -> Vec<crate::specs::SpecInfo> {
+    crate::specs::list_all()
+}
+
+/// Apply a spec profile: populate `major_cds` from the profile's spell IDs
+/// and persist to config.  Pass an empty `spec_key` to clear the selection.
+/// Returns the updated `AppConfig` so the frontend can sync its state.
+#[tauri::command]
+pub fn apply_spec(app_handle: tauri::AppHandle, spec_key: String) -> Result<AppConfig, String> {
+    let dir = app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?;
+    let mut cfg = load_or_default(&dir).map_err(|e| e.to_string())?;
+
+    if spec_key.is_empty() {
+        cfg.selected_spec = String::new();
+        cfg.major_cds     = Vec::new();
+    } else {
+        let profile = crate::specs::load_by_key(&spec_key)
+            .ok_or_else(|| format!("Unknown spec key: {}", spec_key))?;
+        cfg.selected_spec = spec_key;
+        cfg.major_cds     = profile.major_cd_spell_ids;
+        tracing::info!(
+            "Spec applied: {} → {} major CD IDs",
+            cfg.selected_spec, cfg.major_cds.len()
+        );
+    }
+
+    save(&cfg, &dir).map_err(|e| e.to_string())?;
+    Ok(cfg)
 }
 
 /// Try to auto-detect the WoW Logs directory from common install locations.

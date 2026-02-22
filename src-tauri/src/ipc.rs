@@ -35,6 +35,8 @@ pub struct StateSnapshot {
     pub in_combat:       bool,
     /// Successful interrupts cast by the coached player this pull.
     pub interrupt_count: u32,
+    /// Active encounter name from ENCOUNTER_START, or None between pulls.
+    pub encounter_name:  Option<String>,
 }
 
 /// Connection/health status — sent when tailing starts/stops or identity changes.
