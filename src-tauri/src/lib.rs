@@ -72,7 +72,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .endpoints(vec![
+                    "https://github.com/MFredin/CombatCoaching/releases/latest/download/latest.json"
+                        .parse()
+                        .expect("valid updater URL"),
+                ])
+                .build(),
+        )
         .setup(|app| {
             // --- Overlay window: make it transparent and click-through ---
             let overlay = app.get_webview_window("overlay").expect("overlay window not found");

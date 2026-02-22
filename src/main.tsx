@@ -140,7 +140,7 @@ function SettingsApp() {
       <aside style={{ borderRight: "1px solid var(--stroke)", overflow: "auto" }}>
         <div style={{ padding: "16px", borderBottom: "1px solid var(--stroke)" }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>CombatLedger</div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>Live Coach v0.3</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>Live Coach v0.4</div>
         </div>
         <div className="section">
           <h3>Connection</h3>
