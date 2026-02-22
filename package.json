@@ -1,6 +1,6 @@
 {
   "name": "combat-ledger-live-coach",
-  "version": "0.1.0",
+  "version": "0.8.4",
   "private": true,
   "type": "module",
   "scripts": {

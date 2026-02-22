@@ -22,6 +22,15 @@ export default defineConfig({
         main: resolve(__dirname, "index.html"),
         overlay: resolve(__dirname, "overlay.html"),
       },
+      output: {
+        // Force React into one shared chunk so both entry points import the
+        // same instance. Without this, Vite splits useTauriEvents (shared by
+        // main.tsx and overlay.tsx) into its own chunk and bundles a second
+        // React copy inside it — causing React error #310 in production.
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+        },
+      },
     },
   },
 });
