@@ -173,6 +173,12 @@ pub fn run() {
             };
             app.manage(Mutex::new(Some(bundle)));
             app.manage(AtomicBool::new(false)); // pipeline-running gate
+            // Latest connection status — kept in sync by ipc::emit_connection()
+            // so the frontend can poll get_connection_status on mount and always
+            // get the correct value even if it missed the live event.
+            app.manage(Mutex::new(ipc::ConnectionStatus {
+                log_tailing: false, addon_connected: false, wow_path: String::new()
+            }));
 
             let handle = app.handle().clone();
 
@@ -196,6 +202,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             config::get_config,
             save_config,
+            get_connection_status,
             config::detect_wow_path,
             config::list_wtf_characters,
             config::list_specs,
@@ -264,6 +271,25 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
     tauri::async_runtime::spawn(ipc::run(b.advice_rx, b.snap_rx, b.debrief_rx, h));
 
     tracing::info!("Pipeline started successfully");
+}
+
+// ---------------------------------------------------------------------------
+// get_connection_status — polled by the frontend on mount (and optionally
+// after save) to get the current connection status without relying on the
+// one-shot startup event that may have fired before listeners were registered.
+// ---------------------------------------------------------------------------
+
+/// Return the latest connection status stored in managed state.
+/// `ipc::emit_connection()` keeps this in sync every time the tailer or
+/// identity module emits a status change.
+#[tauri::command]
+fn get_connection_status(app: tauri::AppHandle) -> ipc::ConnectionStatus {
+    app.state::<Mutex<ipc::ConnectionStatus>>()
+        .lock()
+        .map(|s| s.clone())
+        .unwrap_or_else(|_| ipc::ConnectionStatus {
+            log_tailing: false, addon_connected: false, wow_path: String::new()
+        })
 }
 
 // ---------------------------------------------------------------------------

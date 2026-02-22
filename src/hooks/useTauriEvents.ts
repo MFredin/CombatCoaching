@@ -5,6 +5,7 @@
 // exactly once and torn down on unmount.
 import { useEffect, useRef } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import {
   type AdviceEvent,
   type StateSnapshot,
@@ -69,6 +70,18 @@ export function useTauriEvents(handlers: TauriEventHandlers): void {
             ref.current.onDebrief?.(e.payload)
           )
         );
+      }
+
+      // All listen() round-trips complete — sync connection status from managed
+      // state so the LOG pill is correct even if the one-shot startup emission
+      // fired before this listener was registered (common on app restart).
+      if (ref.current.onConnection) {
+        try {
+          const status = await invoke<ConnectionStatus>("get_connection_status");
+          ref.current.onConnection(status);
+        } catch {
+          // Backend not ready yet — the live event will arrive shortly
+        }
       }
     };
 

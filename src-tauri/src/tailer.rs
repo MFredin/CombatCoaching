@@ -161,7 +161,10 @@ pub async fn run(
     state.read_new_lines(&tx)?;
 
     loop {
-        match fs_rx.recv() {
+        // recv_timeout allows a periodic heartbeat so the frontend always receives
+        // the current connection status even if it missed the initial one-shot emit
+        // (race between tailer startup and the webview registering its listen() handler).
+        match fs_rx.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(Event { kind, paths, .. })) => {
                 match kind {
                     // A new file was created — check if it's a newer combat log
@@ -202,7 +205,17 @@ pub async fn run(
                 }
             }
             Ok(Err(e)) => tracing::error!("Watcher error: {}", e),
-            Err(_) => {
+            // Heartbeat: no filesystem event for 5 s — re-emit connection status.
+            // This recovers from the race where the frontend registered its listener
+            // after the one-shot startup emission had already fired.
+            Err(std_mpsc::RecvTimeoutError::Timeout) => {
+                ipc::emit_connection(&app_handle, &ConnectionStatus {
+                    log_tailing:     state.active_file.is_some(),
+                    addon_connected: false,
+                    wow_path:        wow_path_str.clone(),
+                });
+            }
+            Err(std_mpsc::RecvTimeoutError::Disconnected) => {
                 tracing::warn!("Watcher channel closed — tailer exiting");
                 break;
             }

@@ -9,7 +9,8 @@
 use crate::engine::AdviceEvent;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc::Receiver;
 
 // ---------------------------------------------------------------------------
@@ -103,7 +104,17 @@ pub async fn run(
 
 /// Convenience function — emit a connection status update from anywhere
 /// that has an AppHandle (called by tailer and identity watcher).
+///
+/// Also updates the `Mutex<ConnectionStatus>` managed state so that
+/// `get_connection_status` (called by the frontend on mount) always returns
+/// the latest value, even if the webview missed the live event.
 pub fn emit_connection(handle: &AppHandle, status: &ConnectionStatus) {
+    // Update managed state (best-effort; state registered in lib.rs setup()).
+    if let Some(state) = handle.try_state::<Mutex<ConnectionStatus>>() {
+        if let Ok(mut guard) = state.lock() {
+            *guard = status.clone();
+        }
+    }
     if let Err(e) = handle.emit(EVENT_CONNECTION, status) {
         tracing::warn!("Failed to emit connection status: {}", e);
     }
