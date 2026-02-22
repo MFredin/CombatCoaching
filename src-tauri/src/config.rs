@@ -184,7 +184,7 @@ pub fn load_or_default(config_dir: &Path) -> Result<AppConfig> {
     }
 }
 
-fn save(config: &AppConfig, config_dir: &Path) -> Result<()> {
+pub fn save(config: &AppConfig, config_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(config_dir)?;
     let raw = toml::to_string_pretty(config)
         .map_err(|e| anyhow::anyhow!("Config serialize error: {}", e))?;
