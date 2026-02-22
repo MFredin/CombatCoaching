@@ -197,6 +197,22 @@ pub async fn run(
                 }
 
                 eng.identity = identity;
+
+                // Back-fill the DB session row with the now-known player identity.
+                // The session is inserted at startup with empty name/GUID; once the
+                // addon or GUID-inference supplies them we write them in so history
+                // queries show the correct character name.
+                if eng.session_id > 0 && !eng.identity.guid.is_empty() {
+                    eng.db.update_session(
+                        eng.session_id,
+                        eng.identity.name.clone(),
+                        eng.identity.guid.clone(),
+                    );
+                    tracing::info!(
+                        "Session {} back-filled → {}",
+                        eng.session_id, eng.identity.name
+                    );
+                }
             }
 
             // Combat log events — the hot path

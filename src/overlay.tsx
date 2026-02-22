@@ -31,6 +31,12 @@ const WINDOW_MS  = 30_000;
 // per-page context limit. Resume is called before each beep because the
 // context may be suspended until the first user gesture (or auto-resumed
 // by the WebView2 desktop app context).
+//
+// Custom audio files are read from disk via the read_audio_file Tauri command,
+// decoded once into AudioBuffers at startup, and stored in _audioBufferCache.
+// Playback falls back to a synthesised beep if the file hasn't been loaded
+// (e.g. on the first cue that fires before pre-loading finishes) or if no
+// custom file is configured.
 // ---------------------------------------------------------------------------
 let _audioCtx: AudioContext | null = null;
 
@@ -41,6 +47,28 @@ function getAudioCtx(): AudioContext {
   return _audioCtx;
 }
 
+/** Decoded AudioBuffers for custom sound files, keyed by absolute file path. */
+const _audioBufferCache = new Map<string, AudioBuffer>();
+
+/**
+ * Read a custom audio file via Tauri IPC, decode it with the Web Audio API,
+ * and store the result in _audioBufferCache for instant playback.
+ * Safe to call multiple times for the same path (early-returns on cache hit).
+ */
+async function preloadAudioBuffer(path: string): Promise<void> {
+  if (!path || _audioBufferCache.has(path)) return;
+  try {
+    // Tauri returns Vec<u8> serialised as a JSON number array.
+    const bytes  = await invoke<number[]>("read_audio_file", { path });
+    const buffer = new Uint8Array(bytes).buffer;
+    const ctx    = getAudioCtx();
+    const decoded = await ctx.decodeAudioData(buffer);
+    _audioBufferCache.set(path, decoded);
+  } catch (e) {
+    console.warn("[audio] Failed to preload:", path, e);
+  }
+}
+
 function playAudioCue(severity: string, cues: AudioCue[]): void {
   const cue = cues.find((c) => c.severity === severity);
   if (!cue?.enabled) return;
@@ -48,16 +76,25 @@ function playAudioCue(severity: string, cues: AudioCue[]): void {
   try {
     const ctx = getAudioCtx();
     const play = () => {
-      const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain);
       gain.connect(ctx.destination);
-      gain.gain.value     = Math.max(0, Math.min(1, cue.volume));
-      osc.frequency.value = severity === "good" ? 880 : severity === "warn" ? 660 : 440;
-      osc.type            = "sine";
-      osc.start();
-      osc.stop(ctx.currentTime + 0.15);
-      osc.onended = () => {};
+      gain.gain.value = Math.max(0, Math.min(1, cue.volume));
+
+      // Use pre-decoded custom buffer if available; otherwise synthesised beep.
+      const cached = cue.sound_path ? _audioBufferCache.get(cue.sound_path) : undefined;
+      if (cached) {
+        const source  = ctx.createBufferSource();
+        source.buffer = cached;
+        source.connect(gain);
+        source.start();
+      } else {
+        const osc = ctx.createOscillator();
+        osc.connect(gain);
+        osc.frequency.value = severity === "good" ? 880 : severity === "warn" ? 660 : 440;
+        osc.type            = "sine";
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+      }
     };
     // Resume context if suspended (WebView2 may suspend until first interaction)
     if (ctx.state === "suspended") {
@@ -89,12 +126,21 @@ function OverlayApp() {
   // Audio cues kept in a ref — no re-renders needed when config reloads
   const audioCuesRef = useRef<AudioCue[]>([]);
 
-  // Load panel positions and audio config from config on mount
+  // Load panel positions and audio config from config on mount.
+  // Also pre-decode any custom audio files in the background so first-hit
+  // playback is instant rather than decoding on demand.
   useEffect(() => {
     invoke<AppConfig>("get_config")
       .then((cfg) => {
         setPanels(cfg.panel_positions ?? []);
-        audioCuesRef.current = cfg.audio_cues ?? [];
+        const cues = cfg.audio_cues ?? [];
+        audioCuesRef.current = cues;
+        // Fire-and-forget — errors are logged inside preloadAudioBuffer
+        for (const cue of cues) {
+          if (cue.sound_path) {
+            void preloadAudioBuffer(cue.sound_path);
+          }
+        }
       })
       .catch(() => {}); // No config yet — panels use default positions
   }, []);

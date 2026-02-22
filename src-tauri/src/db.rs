@@ -6,6 +6,10 @@
 /// The writer runs on a dedicated `std::thread` (rusqlite::Connection is !Send
 /// across await points) and receives commands via a bounded sync channel.
 /// Callers hold a cheap `DbWriter` handle that is Clone + Send + Sync.
+///
+/// Read queries (e.g. pull history) open their own short-lived read-only
+/// connection from a Tauri command handler via `spawn_blocking`, keeping the
+/// writer thread focused on writes only.
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -19,6 +23,11 @@ pub enum DbCommand {
     InsertSession {
         reply:       oneshot::Sender<Result<i64>>,
         started_at:  u64,
+        player_name: String,
+        player_guid: String,
+    },
+    UpdateSession {
+        session_id:  i64,
         player_name: String,
         player_guid: String,
     },
@@ -65,6 +74,11 @@ impl DbWriter {
             .send(DbCommand::InsertSession { reply: reply_tx, started_at, player_name, player_guid })
             .map_err(|_| anyhow::anyhow!("DB writer channel closed"))?;
         reply_rx.await.map_err(|_| anyhow::anyhow!("DB reply channel closed"))?
+    }
+
+    /// Back-fill player identity into the session row (fire-and-forget).
+    pub fn update_session(&self, session_id: i64, player_name: String, player_guid: String) {
+        let _ = self.tx.send(DbCommand::UpdateSession { session_id, player_name, player_guid });
     }
 
     /// Insert a new pull row; returns the auto-generated row id.
@@ -179,6 +193,15 @@ fn db_writer_loop(rx: std::sync::mpsc::Receiver<DbCommand>, conn: Connection) {
                     .map(|_| conn.last_insert_rowid())
                     .map_err(anyhow::Error::from);
                 let _ = reply.send(result);
+            }
+
+            DbCommand::UpdateSession { session_id, player_name, player_guid } => {
+                if let Err(e) = conn.execute(
+                    "UPDATE sessions SET player_name = ?1, player_guid = ?2 WHERE id = ?3",
+                    params![player_name, player_guid, session_id],
+                ) {
+                    tracing::warn!("DB update_session error: {}", e);
+                }
             }
 
             DbCommand::InsertPull { reply, session_id, pull_number, started_at } => {

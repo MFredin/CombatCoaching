@@ -164,6 +164,8 @@ pub fn run() {
             config::apply_spec,
             check_for_update,
             toggle_overlay,
+            get_pull_history,
+            read_audio_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -300,6 +302,104 @@ fn toggle_overlay(app: tauri::AppHandle) -> Result<bool, String> {
     }
 
     Ok(new_visible)
+}
+
+// ---------------------------------------------------------------------------
+// Pull history — read-only query, opens its own short-lived SQLite connection
+// so the writer thread is never blocked.
+// ---------------------------------------------------------------------------
+
+/// One row returned by get_pull_history.
+/// Mirrors the joined pulls + sessions + advice_events query.
+#[derive(serde::Serialize)]
+struct PullHistoryRow {
+    pull_id:      i64,
+    session_id:   i64,
+    pull_number:  u32,
+    /// Unix epoch milliseconds (matches the u64 stored by the writer).
+    started_at:   u64,
+    ended_at:     Option<u64>,
+    outcome:      Option<String>,
+    encounter:    Option<String>,
+    player_name:  String,
+    advice_count: u32,
+}
+
+/// Return the last 25 pulls (newest first) with advice event counts.
+/// Opens a read-only SQLite connection so the writer thread is never blocked.
+#[tauri::command]
+async fn get_pull_history(app: tauri::AppHandle) -> Result<Vec<PullHistoryRow>, String> {
+    let db_path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("sessions.sqlite");
+
+    if !db_path.exists() {
+        return Ok(vec![]);
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = rusqlite::Connection::open_with_flags(
+            &db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(|e| format!("DB open: {}", e))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.session_id, p.pull_number, p.started_at, p.ended_at, \
+                        p.outcome, p.encounter, \
+                        COALESCE(s.player_name, '') AS player_name, \
+                        COUNT(ae.id) AS advice_count \
+                 FROM pulls p \
+                 LEFT JOIN sessions s ON s.id = p.session_id \
+                 LEFT JOIN advice_events ae ON ae.pull_id = p.id \
+                 GROUP BY p.id \
+                 ORDER BY p.id DESC \
+                 LIMIT 25",
+            )
+            .map_err(|e| format!("DB prepare: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let ended_raw: Option<i64> = row.get(4)?;
+                Ok(PullHistoryRow {
+                    pull_id:      row.get(0)?,
+                    session_id:   row.get(1)?,
+                    pull_number:  row.get::<_, i64>(2)? as u32,
+                    started_at:   row.get::<_, i64>(3)? as u64,
+                    ended_at:     ended_raw.map(|v| v as u64),
+                    outcome:      row.get(5)?,
+                    encounter:    row.get(6)?,
+                    player_name:  row.get(7)?,
+                    advice_count: row.get::<_, i64>(8)? as u32,
+                })
+            })
+            .map_err(|e| format!("DB query: {}", e))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("DB row: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
+// ---------------------------------------------------------------------------
+// Audio file loader — read raw bytes from the filesystem so the overlay's
+// Web Audio API can decode them without needing the Tauri asset protocol.
+// ---------------------------------------------------------------------------
+
+/// Read a local audio file and return its raw bytes.
+/// The overlay converts the returned byte array to an ArrayBuffer and calls
+/// `AudioContext.decodeAudioData()` to produce a reusable AudioBuffer.
+#[tauri::command]
+async fn read_audio_file(path: String) -> Result<Vec<u8>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::read(&path).map_err(|e| format!("Failed to read audio file: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
 }
 
 fn invoke_save(cfg: &config::AppConfig, config_dir: &std::path::Path) -> anyhow::Result<()> {

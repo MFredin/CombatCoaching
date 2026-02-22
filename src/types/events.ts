@@ -103,6 +103,20 @@ export interface WtfCharacter {
   account: string;
 }
 
+/** One row from the get_pull_history command. Mirrors lib::PullHistoryRow on the Rust side. */
+export interface PullHistoryRow {
+  pull_id:      number;
+  session_id:   number;
+  pull_number:  number;
+  /** Unix epoch milliseconds */
+  started_at:   number;
+  ended_at?:    number | null;
+  outcome?:     string | null;
+  encounter?:   string | null;
+  player_name:  string;
+  advice_count: number;
+}
+
 /** End-of-pull summary emitted by the engine. Mirrors ipc::PullDebrief on the Rust side. */
 export interface PullDebrief {
   pull_number:         number;

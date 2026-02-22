@@ -13,6 +13,7 @@ import type {
   AdviceEvent,
   ConnectionStatus as ConnStatus,
   PanelPosition,
+  PullHistoryRow,
   SpecInfo,
   StateSnapshot,
   UpdateInfo,
@@ -23,7 +24,7 @@ import "./styles/settings.css";
 // ---------------------------------------------------------------------------
 // Tab definitions
 // ---------------------------------------------------------------------------
-type Tab = "home" | "livefeed" | "audio" | "hotkeys";
+type Tab = "home" | "livefeed" | "audio" | "hotkeys" | "history";
 
 // ---------------------------------------------------------------------------
 // Root settings app
@@ -172,6 +173,7 @@ function SettingsApp() {
     livefeed: "📡 Live Feed",
     audio:    "🔊 Audio",
     hotkeys:  "⌨ Hotkeys",
+    history:  "📜 History",
   };
 
   return (
@@ -187,7 +189,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v0.9.0
+            Live Coach v0.9.1
           </div>
         </div>
 
@@ -250,6 +252,7 @@ function SettingsApp() {
             overlayOn={overlayOn} toggleOverlay={toggleOverlay}
           />
         )}
+        {tab === "history"  && <HistoryTab />}
       </div>
     </div>
   );
@@ -812,6 +815,138 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
           {overlayOn ? "🟢 Overlay ON — click to hide" : "🔴 Overlay OFF — click to show"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// HISTORY TAB
+// ===========================================================================
+
+function HistoryTab() {
+  const [rows, setRows]       = useState<PullHistoryRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  function load() {
+    setLoading(true);
+    invoke<PullHistoryRow[]>("get_pull_history")
+      .then((r) => setRows(r))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => { load(); }, []);
+
+  function fmtDuration(startMs: number, endMs: number | null | undefined): string {
+    if (!endMs) return "—";
+    const elapsed = endMs - startMs;
+    if (elapsed <= 0) return "—";
+    const mins = Math.floor(elapsed / 60_000);
+    const secs = Math.floor((elapsed % 60_000) / 1_000);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  function fmtWhen(ms: number): string {
+    return new Date(ms).toLocaleString(undefined, {
+      month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  const outcomeColor: Record<string, string> = {
+    kill:    "var(--good)",
+    wipe:    "var(--bad)",
+    unknown: "var(--muted)",
+  };
+
+  return (
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexShrink: 0 }}>
+        <div>
+          <h2 style={{ margin: "0 0 4px 0", fontSize: 16 }}>Pull History</h2>
+          <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>
+            Last 25 pulls across all sessions. Advice count includes all severities.
+          </p>
+        </div>
+        <button onClick={load} disabled={loading} style={{ flexShrink: 0 }}>
+          {loading ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      {/* Content */}
+      {loading || rows === null ? (
+        <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>Loading history…</div>
+      ) : rows.length === 0 ? (
+        <div style={{
+          background: "rgba(255,255,255,0.03)", border: "1px solid var(--stroke)",
+          borderRadius: 10, padding: "24px 20px", textAlign: "center",
+        }}>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>No pulls recorded yet.</div>
+          <div style={{ fontSize: 11, color: "var(--muted)" }}>
+            Enable combat logging in WoW (<code>/combatlog</code>) and enter combat to record your first pull.
+          </div>
+        </div>
+      ) : (
+        <div style={{ overflow: "auto", flex: 1 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{
+                borderBottom: "1px solid var(--stroke)",
+                color: "var(--muted)", fontSize: 10,
+                textTransform: "uppercase", letterSpacing: 0.5,
+              }}>
+                <th style={{ textAlign: "left",  padding: "6px 12px", fontWeight: 600 }}>#</th>
+                <th style={{ textAlign: "left",  padding: "6px 12px", fontWeight: 600 }}>Character</th>
+                <th style={{ textAlign: "left",  padding: "6px 12px", fontWeight: 600 }}>Encounter</th>
+                <th style={{ textAlign: "left",  padding: "6px 12px", fontWeight: 600 }}>Outcome</th>
+                <th style={{ textAlign: "right", padding: "6px 12px", fontWeight: 600 }}>Duration</th>
+                <th style={{ textAlign: "right", padding: "6px 12px", fontWeight: 600 }}>Advice</th>
+                <th style={{ textAlign: "right", padding: "6px 12px", fontWeight: 600 }}>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr
+                  key={r.pull_id}
+                  style={{
+                    background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                    borderBottom: "1px solid rgba(255,255,255,0.04)",
+                  }}
+                >
+                  <td style={{ padding: "8px 12px", color: "var(--muted)" }}>{r.pull_number}</td>
+                  <td style={{ padding: "8px 12px" }}>{r.player_name || "—"}</td>
+                  <td style={{
+                    padding: "8px 12px", maxWidth: 200,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {r.encounter ?? "—"}
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>
+                    <span style={{
+                      color: outcomeColor[r.outcome ?? "unknown"] ?? "var(--muted)",
+                      fontWeight: 600, textTransform: "capitalize",
+                    }}>
+                      {r.outcome ?? "—"}
+                    </span>
+                  </td>
+                  <td style={{ padding: "8px 12px", textAlign: "right", fontFamily: "var(--mono)" }}>
+                    {fmtDuration(r.started_at, r.ended_at)}
+                  </td>
+                  <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                    <span style={{ color: r.advice_count > 0 ? "var(--text)" : "var(--muted)" }}>
+                      {r.advice_count}
+                    </span>
+                  </td>
+                  <td style={{ padding: "8px 12px", textAlign: "right", color: "var(--muted)", fontSize: 11 }}>
+                    {fmtWhen(r.started_at)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
