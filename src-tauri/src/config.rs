@@ -12,6 +12,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use tauri::Manager; // required for AppHandle::path() and app_config_dir()
 
 // ---------------------------------------------------------------------------
 // AppConfig
