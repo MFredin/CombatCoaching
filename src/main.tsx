@@ -79,6 +79,26 @@ function SettingsApp() {
     }, []),
   });
 
+  // NOTE: this useEffect MUST stay above the `if (!config)` guard below.
+  // Placing any hook after an early return violates the Rules of Hooks and
+  // causes React error #310 ("Rendered more hooks than during previous render").
+  async function checkForUpdates() {
+    setChecking(true); setUpdateInfo(null);
+    try {
+      setUpdateInfo(await invoke<UpdateInfo>("check_for_update"));
+    } catch (e) {
+      setUpdateInfo({ available: false, current_version: "?", new_version: null, notes: String(e) });
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => { void checkForUpdates(); }, 5_000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!config) {
     return <div style={{ padding: 32, color: "var(--muted)" }}>Loading…</div>;
   }
@@ -118,23 +138,6 @@ function SettingsApp() {
     });
     if (typeof selected === "string") await save({ ...config, addon_sv_path: selected });
   }
-
-  async function checkForUpdates() {
-    setChecking(true); setUpdateInfo(null);
-    try {
-      setUpdateInfo(await invoke<UpdateInfo>("check_for_update"));
-    } catch (e) {
-      setUpdateInfo({ available: false, current_version: "?", new_version: null, notes: String(e) });
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  useEffect(() => {
-    const t = setTimeout(() => { void checkForUpdates(); }, 5_000);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function updatePanels(positions: PanelPosition[]) {
     const updated = { ...config, panel_positions: positions };
@@ -189,7 +192,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v0.9.2
+            Live Coach v0.9.3
           </div>
         </div>
 
