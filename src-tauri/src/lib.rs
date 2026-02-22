@@ -72,7 +72,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // tauri-plugin-updater intentionally omitted — requires a signing key pair.
+        // Update checks use the check_for_update command below (GitHub API via reqwest).
+        // TODO: generate a keypair and re-enable tauri-plugin-updater for auto-install.
         .setup(|app| {
             // --- Overlay window: make it transparent and click-through ---
             let overlay = app.get_webview_window("overlay").expect("overlay window not found");
@@ -201,49 +203,57 @@ pub struct UpdateInfo {
     pub notes:           Option<String>,
 }
 
-/// Check GitHub Releases for a newer version.
-/// Returns UpdateInfo; if an update is available the frontend shows a prompt.
-/// Downloading and installing is handled by tauri-plugin-updater automatically.
+/// Check GitHub Releases for a newer version by fetching latest.json.
+/// Uses the standard GitHub Releases download URL — no plugin required.
+/// Version comparison: if the remote version string differs from the current
+/// package version, we report an update as available.
 #[tauri::command]
 async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
-    use tauri_plugin_updater::UpdaterExt;
-
     let current = app.package_info().version.to_string();
 
-    match app.updater() {
-        Ok(updater) => {
-            match updater.check().await {
-                Ok(Some(update)) => {
-                    tracing::info!(
-                        "Update available: {} → {}",
-                        current,
-                        update.version
-                    );
-                    Ok(UpdateInfo {
-                        available:       true,
-                        current_version: current,
-                        new_version:     Some(update.version.clone()),
-                        notes:           update.body.clone(),
-                    })
-                }
-                Ok(None) => {
-                    tracing::info!("No update available (current: {})", current);
-                    Ok(UpdateInfo {
-                        available:       false,
-                        current_version: current,
-                        new_version:     None,
-                        notes:           None,
-                    })
-                }
-                Err(e) => {
-                    tracing::warn!("Update check failed: {}", e);
-                    Err(format!("Update check failed: {}", e))
-                }
-            }
-        }
+    // Fetch the latest.json manifest uploaded by CI alongside each release.
+    let url = "https://github.com/MFredin/CombatCoaching/releases/latest/download/latest.json";
+
+    let response = tauri::async_runtime::spawn_blocking(|| {
+        // Use ureq (bundled with tauri as a transitive dep via tauri-utils) for a
+        // simple synchronous HTTP GET. ureq is lighter than reqwest for a one-shot check.
+        ureq::get(url)
+            .call()
+            .map(|r| r.into_string().unwrap_or_default())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?;
+
+    match response {
         Err(e) => {
-            tracing::warn!("Updater not available: {}", e);
-            Err(format!("Updater not configured: {}", e))
+            tracing::warn!("Update check HTTP error: {}", e);
+            Err(format!("Update check failed: {}", e))
+        }
+        Ok(body) => {
+            // latest.json shape: { "version": "0.7.0", "notes": "...", ... }
+            let parsed: serde_json::Value = serde_json::from_str(&body)
+                .map_err(|e| format!("Update manifest parse error: {}", e))?;
+
+            let remote_version = parsed["version"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            let notes = parsed["notes"].as_str().map(|s| s.to_string());
+
+            let available = !remote_version.is_empty() && remote_version != current;
+
+            tracing::info!(
+                "Update check: current={} remote={} available={}",
+                current, remote_version, available
+            );
+
+            Ok(UpdateInfo {
+                available,
+                current_version: current,
+                new_version:     if available { Some(remote_version) } else { None },
+                notes,
+            })
         }
     }
 }
