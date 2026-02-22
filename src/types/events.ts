@@ -103,11 +103,24 @@ export interface WtfCharacter {
   account: string;
 }
 
+/** End-of-pull summary emitted by the engine. Mirrors ipc::PullDebrief on the Rust side. */
+export interface PullDebrief {
+  pull_number:         number;
+  pull_elapsed_ms:     number;
+  /** "kill", "wipe", or "unknown" */
+  outcome:             string;
+  avoidable_count:     number;
+  interrupt_count:     number;
+  total_advice_fired:  number;
+  gcd_gap_count:       number;
+}
+
 // IPC event name constants — must match ipc.rs
 export const EVENT_ADVICE:     string = "coach:advice";
 export const EVENT_STATE:      string = "coach:state";
 export const EVENT_CONNECTION: string = "coach:connection";
 export const EVENT_IDENTITY:   string = "coach:identity";
+export const EVENT_DEBRIEF:    string = "coach:debrief";
 
 // Known panel IDs
 export const PANEL_PULL_CLOCK:   string = "pull_clock";

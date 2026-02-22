@@ -3,7 +3,7 @@
 /// All state lives in a single CombatState owned by the engine task.
 /// No locking is needed because the engine is single-threaded.
 use crate::parser::LogEvent;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // ---------------------------------------------------------------------------
 // Pull tracking
@@ -50,6 +50,62 @@ impl EventWindow {
         self.events.push(WindowedEvent { timestamp_ms: now_ms, event });
         let cutoff = now_ms.saturating_sub(self.window_ms);
         self.events.retain(|e| e.timestamp_ms >= cutoff);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Interrupt tracker (persists interruptible spell knowledge across pulls)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct InterruptTracker {
+    /// Spell IDs the coached player has successfully interrupted before.
+    /// Populated from SPELL_INTERRUPT events; persists across pulls (learned knowledge).
+    pub interruptible_spells: HashSet<u32>,
+}
+
+impl InterruptTracker {
+    pub fn record_interrupt(&mut self, interrupted_spell_id: u32) {
+        self.interruptible_spells.insert(interrupted_spell_id);
+    }
+
+    pub fn is_interruptible(&self, spell_id: u32) -> bool {
+        self.interruptible_spells.contains(&spell_id)
+    }
+
+    /// Called on pull start — keeps learned spell IDs (knowledge persists).
+    pub fn reset_per_pull(&mut self) {
+        // intentionally no-op: interruptible_spells carries over between pulls
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Damage taken tracker (rolling window for defensive timing rule)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct DamageTakenTracker {
+    /// (timestamp_ms, amount) pairs — appended on every hit, cleared on pull start.
+    pub events: Vec<(u64, u64)>,
+}
+
+impl DamageTakenTracker {
+    pub fn record(&mut self, timestamp_ms: u64, amount: u64) {
+        self.events.push((timestamp_ms, amount));
+    }
+
+    /// Sum of damage taken in the last `window_ms` milliseconds.
+    /// Read-only — pruning deferred to pull reset (bounded by pull duration).
+    pub fn recent_damage(&self, now_ms: u64, window_ms: u64) -> u64 {
+        let cutoff = now_ms.saturating_sub(window_ms);
+        self.events.iter()
+            .filter(|(ts, _)| *ts >= cutoff)
+            .map(|(_, amt)| *amt)
+            .sum()
+    }
+
+    pub fn reset(&mut self) {
+        self.events.clear();
     }
 }
 
@@ -158,6 +214,10 @@ pub struct CombatState {
     pub interrupt_count: u32,
     /// Active encounter name from ENCOUNTER_START/END (None between pulls).
     pub encounter_name:  Option<String>,
+    /// Tracks known interruptible spell IDs (learned from past SpellInterrupted events).
+    pub interrupts:      InterruptTracker,
+    /// Rolling per-pull damage taken (used by defensive_timing rule).
+    pub damage_taken:    DamageTakenTracker,
 }
 
 impl CombatState {
@@ -173,6 +233,8 @@ impl CombatState {
             player_guid:     None,
             interrupt_count: 0,
             encounter_name:  None,
+            interrupts:      InterruptTracker::default(),
+            damage_taken:    DamageTakenTracker::default(),
         }
     }
 
@@ -188,6 +250,8 @@ impl CombatState {
         self.cooldowns.reset();
         self.gcd.reset();
         self.interrupt_count = 0;
+        self.damage_taken.reset();
+        self.interrupts.reset_per_pull();
         self.in_combat = true;
         tracing::info!("Pull {} started at {}ms", n, timestamp_ms);
     }
@@ -246,5 +310,26 @@ mod tests {
         gcd.record_cast(1000);
         gcd.record_cast(3500);
         assert_eq!(gcd.current_gap_ms, 2500);
+    }
+
+    #[test]
+    fn interrupt_tracker_learns_across_pulls() {
+        let mut tracker = InterruptTracker::default();
+        tracker.record_interrupt(12345);
+        assert!(tracker.is_interruptible(12345));
+        tracker.reset_per_pull();
+        assert!(tracker.is_interruptible(12345), "knowledge should persist");
+    }
+
+    #[test]
+    fn damage_taken_recent_window() {
+        let mut tracker = DamageTakenTracker::default();
+        tracker.record(1000, 5_000);
+        tracker.record(3000, 10_000);
+        tracker.record(6000, 8_000);
+        // at now=7000, window=5000 → cutoff=2000 → events at 3000 + 6000 qualify
+        assert_eq!(tracker.recent_damage(7000, 5_000), 18_000);
+        // only event at 6000 qualifies with a 2s window
+        assert_eq!(tracker.recent_damage(7000, 2_000), 8_000);
     }
 }

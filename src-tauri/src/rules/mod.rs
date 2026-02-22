@@ -1,6 +1,9 @@
 pub mod avoidable_repeat;
 pub mod cooldown_drift;
+pub mod defensive_timing;
 pub mod gcd_gap;
+pub mod interrupt_miss;
+pub mod interrupt_success;
 
 use crate::{
     engine::{AdviceEvent, Severity},

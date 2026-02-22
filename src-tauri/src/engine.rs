@@ -12,13 +12,23 @@
 /// GUID inference: if the addon is not installed, the engine infers the
 /// player GUID from the first SPELL_CAST_SUCCESS whose source_name matches
 /// the `player_focus` character name stored in AppConfig.
+///
+/// Two evaluation passes per event:
+///   Pass 1 — enemy events (interrupt_miss): runs on all in-combat events,
+///             the rule itself filters for enemy SpellCastSuccess.
+///   Pass 2 — coached player events: gated by is_coached_event(), includes
+///             avoidable_repeat, gcd_gap, cooldown_drift, interrupt_success,
+///             defensive_timing.
 use crate::{
     config::AppConfig,
     db::DbWriter,
     identity::PlayerIdentity,
-    ipc::StateSnapshot,
+    ipc::{PullDebrief, StateSnapshot},
     parser::LogEvent,
-    rules::{avoidable_repeat, cooldown_drift, gcd_gap, RuleContext, RuleInput},
+    rules::{
+        avoidable_repeat, cooldown_drift, defensive_timing, gcd_gap,
+        interrupt_miss, interrupt_success, RuleContext, RuleInput,
+    },
     specs,
     state::{CombatState, PullOutcome},
 };
@@ -73,14 +83,14 @@ struct EngineState {
     /// Resolved major CD IDs — from spec profile (auto-detected or user-selected).
     /// Falls back to `config.major_cds` if no spec profile is loaded.
     effective_major_cds: Vec<u32>,
-    /// Resolved active mitigation IDs — from spec profile (for future rules).
-    #[allow(dead_code)]
+    /// Resolved active mitigation IDs — from spec profile.
     effective_am_spells: Vec<u32>,
     /// Character name extracted from `config.player_focus` for GUID inference.
     focus_name:          String,
-    /// Total advice events fired this pull (for future debrief).
-    #[allow(dead_code)]
+    /// Total advice events fired this pull (for debrief).
     pull_advice_count:   u32,
+    /// GCD gap advice events fired this pull (for debrief).
+    pull_gcd_gap_count:  u32,
 }
 
 impl EngineState {
@@ -118,6 +128,7 @@ impl EngineState {
             effective_am_spells,
             focus_name,
             pull_advice_count:   0,
+            pull_gcd_gap_count:  0,
             config,
         }
     }
@@ -142,6 +153,7 @@ pub async fn run(
     mut id_rx:     Receiver<PlayerIdentity>,
     advice_tx:     Sender<AdviceEvent>,
     snap_tx:       Sender<StateSnapshot>,
+    debrief_tx:    Sender<PullDebrief>,
     config:        AppConfig,
     db:            DbWriter,
 ) -> Result<()> {
@@ -213,8 +225,9 @@ pub async fn run(
 
                 // ── Pull start ─────────────────────────────────────────────────
                 if !was_in_combat && eng.combat.in_combat {
-                    eng.pull_number      += 1;
-                    eng.pull_advice_count = 0;
+                    eng.pull_number       += 1;
+                    eng.pull_advice_count  = 0;
+                    eng.pull_gcd_gap_count = 0;
                     let pn  = eng.pull_number;
                     let sid = eng.session_id;
                     match eng.db.insert_pull(sid, pn, now_ms).await {
@@ -228,53 +241,96 @@ pub async fn run(
 
                 // ── Pull end ───────────────────────────────────────────────────
                 if was_in_combat && !eng.combat.in_combat {
+                    // Capture debrief stats BEFORE resetting pull-level counters.
+                    // At this point avoidable, interrupt_count, etc. still hold
+                    // the just-ended pull's values (reset happens on next start_pull).
+                    let pull_elapsed = eng.combat.pull_history.last()
+                        .and_then(|p| p.end_ms.zip(Some(p.start_ms)))
+                        .map(|(end, start)| end.saturating_sub(start))
+                        .unwrap_or(0);
+                    let outcome_str = eng.combat.pull_history.last()
+                        .and_then(|p| p.outcome.as_ref())
+                        .map(|o| format!("{:?}", o).to_lowercase())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    let debrief = PullDebrief {
+                        pull_number:        eng.pull_number,
+                        pull_elapsed_ms:    pull_elapsed,
+                        outcome:            outcome_str.clone(),
+                        avoidable_count:    eng.combat.avoidable.total_hits(),
+                        interrupt_count:    eng.combat.interrupt_count,
+                        total_advice_fired: eng.pull_advice_count,
+                        gcd_gap_count:      eng.pull_gcd_gap_count,
+                    };
+                    tracing::info!(
+                        "Pull debrief: {} {}ms outcome={} avoidable={} interrupts={} advice={}",
+                        eng.pull_number, pull_elapsed, outcome_str,
+                        debrief.avoidable_count, debrief.interrupt_count, debrief.total_advice_fired
+                    );
+                    let _ = debrief_tx.try_send(debrief);
+
                     if let Some(pull_id) = eng.current_pull_id.take() {
-                        let outcome = eng.combat.pull_history.last()
-                            .and_then(|p| p.outcome.as_ref())
-                            .map(|o| format!("{:?}", o).to_lowercase())
-                            .unwrap_or_else(|| "unknown".to_string());
-                        eng.db.end_pull(pull_id, now_ms, outcome);
+                        eng.db.end_pull(pull_id, now_ms, outcome_str);
                     }
                     // Reset per-pull dedup so rules fire fresh next pull
                     eng.advice_last_ms.clear();
                 }
 
-                // Only run coaching rules for events involving the coached player
-                let coached = is_coached_event(&event, &eng.combat.player_guid);
-                if coached {
-                    let ctx = RuleContext {
-                        state:     &eng.combat,
-                        identity:  &eng.identity,
-                        intensity: eng.config.intensity,
-                        now_ms,
-                    };
-                    let input = RuleInput { event: &event };
+                // ── Rule evaluation ────────────────────────────────────────────
+                // Build context once — shared by both passes.
+                let ctx = RuleContext {
+                    state:     &eng.combat,
+                    identity:  &eng.identity,
+                    intensity: eng.config.intensity,
+                    now_ms,
+                };
+                let input = RuleInput { event: &event };
 
-                    let candidates: Vec<AdviceEvent> = avoidable_repeat::evaluate(&input, &ctx)
-                        .into_iter()
-                        .chain(gcd_gap::evaluate(&input, &ctx))
-                        .chain(cooldown_drift::evaluate(&input, &ctx, &eng.effective_major_cds))
-                        .collect();
+                let mut candidates: Vec<AdviceEvent> = Vec::new();
 
-                    for advice in candidates {
-                        if eng.can_fire(&advice.key, &advice.severity, now_ms) {
-                            eng.mark_fired(&advice.key, now_ms);
-                            eng.pull_advice_count += 1;
+                // Pass 1: enemy event rules (interrupt_miss)
+                // Runs for all in-combat events regardless of GUID.
+                // The rule itself filters for enemy SpellCastSuccess.
+                if eng.combat.in_combat {
+                    candidates.extend(interrupt_miss::evaluate(&input, &ctx));
+                }
 
-                            // Persist to DB (fire-and-forget)
-                            if let Some(pull_id) = eng.current_pull_id {
-                                eng.db.insert_advice(
-                                    pull_id,
-                                    now_ms,
-                                    advice.key.clone(),
-                                    format!("{:?}", advice.severity).to_lowercase(),
-                                    advice.message.clone(),
-                                );
-                            }
+                // Pass 2: coached player rules
+                if is_coached_event(&event, &eng.combat.player_guid) {
+                    candidates.extend(
+                        avoidable_repeat::evaluate(&input, &ctx)
+                            .into_iter()
+                            .chain(gcd_gap::evaluate(&input, &ctx))
+                            .chain(cooldown_drift::evaluate(&input, &ctx, &eng.effective_major_cds))
+                            .chain(interrupt_success::evaluate(&input, &ctx))
+                            .chain(defensive_timing::evaluate(&input, &ctx, &eng.effective_am_spells))
+                    );
+                }
 
-                            if advice_tx.send(advice).await.is_err() {
-                                return Ok(());
-                            }
+                // Dedup + fire all candidates
+                for advice in candidates {
+                    if eng.can_fire(&advice.key, &advice.severity, now_ms) {
+                        // Track GCD gap events for debrief
+                        if advice.key.starts_with("gcd_gap") {
+                            eng.pull_gcd_gap_count += 1;
+                        }
+
+                        eng.mark_fired(&advice.key, now_ms);
+                        eng.pull_advice_count += 1;
+
+                        // Persist to DB (fire-and-forget)
+                        if let Some(pull_id) = eng.current_pull_id {
+                            eng.db.insert_advice(
+                                pull_id,
+                                now_ms,
+                                advice.key.clone(),
+                                format!("{:?}", advice.severity).to_lowercase(),
+                                advice.message.clone(),
+                            );
+                        }
+
+                        if advice_tx.send(advice).await.is_err() {
+                            return Ok(());
                         }
                     }
                 }
@@ -331,9 +387,17 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
             }
         }
 
-        LogEvent::SpellDamage { dest_guid, spell_id, .. } => {
+        LogEvent::SpellDamage { dest_guid, spell_id, amount, .. } => {
             if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
                 state.avoidable.record_hit(*spell_id, now_ms);
+                state.damage_taken.record(now_ms, *amount);
+            }
+            state.event_window.push(event.clone(), now_ms);
+        }
+
+        LogEvent::SwingDamage { dest_guid, amount, .. } => {
+            if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
+                state.damage_taken.record(now_ms, *amount);
             }
             state.event_window.push(event.clone(), now_ms);
         }
@@ -352,9 +416,11 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
             }
         }
 
-        LogEvent::SpellInterrupted { source_guid, .. } => {
+        LogEvent::SpellInterrupted { source_guid, interrupted_spell_id, .. } => {
             if Some(source_guid.as_str()) == state.player_guid.as_deref() {
                 state.interrupt_count += 1;
+                // Record this spell as interruptible for future interrupt_miss rule
+                state.interrupts.record_interrupt(*interrupted_spell_id);
             }
             state.event_window.push(event.clone(), now_ms);
         }

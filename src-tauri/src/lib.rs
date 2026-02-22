@@ -103,12 +103,14 @@ pub fn run() {
 
             // --- Build inter-module async channels ---
             // Pipeline: tailer -> parser -> engine -> ipc
-            let (raw_tx,  raw_rx)      = mpsc::channel::<String>(2048);
-            let (event_tx, event_rx)   = mpsc::channel::<parser::LogEvent>(1024);
-            let (advice_tx, advice_rx) = mpsc::channel::<engine::AdviceEvent>(128);
-            let (id_tx,   id_rx)       = mpsc::channel::<identity::PlayerIdentity>(16);
+            let (raw_tx,  raw_rx)        = mpsc::channel::<String>(2048);
+            let (event_tx, event_rx)     = mpsc::channel::<parser::LogEvent>(1024);
+            let (advice_tx, advice_rx)   = mpsc::channel::<engine::AdviceEvent>(128);
+            let (id_tx,   id_rx)         = mpsc::channel::<identity::PlayerIdentity>(16);
             // State snapshots emitted by engine for UI widgets
-            let (snap_tx, snap_rx)     = mpsc::channel::<ipc::StateSnapshot>(128);
+            let (snap_tx, snap_rx)       = mpsc::channel::<ipc::StateSnapshot>(128);
+            // Pull debrief emitted by engine on pull end
+            let (debrief_tx, debrief_rx) = mpsc::channel::<ipc::PullDebrief>(16);
 
             // --- SQLite ---
             let db_path  = app.path().app_data_dir()?.join("sessions.sqlite");
@@ -132,6 +134,7 @@ pub fn run() {
                     id_tx,
                     id_rx,
                     snap_tx,
+                    debrief_tx,
                     db_writer,
                 );
             } else {
@@ -143,9 +146,9 @@ pub fn run() {
                 });
             }
 
-            // IPC task always runs (relays advice + snapshots to frontend)
+            // IPC task always runs (relays advice + snapshots + debriefs to frontend)
             let ipc_handle = app.handle().clone();
-            tauri::async_runtime::spawn(ipc::run(advice_rx, snap_rx, ipc_handle));
+            tauri::async_runtime::spawn(ipc::run(advice_rx, snap_rx, debrief_rx, ipc_handle));
 
             // Show overlay after setup
             overlay.show()?;
@@ -179,6 +182,7 @@ fn start_pipeline(
     id_tx: mpsc::Sender<identity::PlayerIdentity>,
     id_rx: mpsc::Receiver<identity::PlayerIdentity>,
     snap_tx: mpsc::Sender<ipc::StateSnapshot>,
+    debrief_tx: mpsc::Sender<ipc::PullDebrief>,
     db_writer: db::DbWriter,
 ) {
     let wow_log_path  = cfg.wow_log_path.clone();
@@ -192,7 +196,7 @@ fn start_pipeline(
     ));
     tauri::async_runtime::spawn(parser::run(raw_rx, event_tx));
     tauri::async_runtime::spawn(identity::run(addon_sv_path, id_tx, app_handle));
-    tauri::async_runtime::spawn(engine::run(event_rx, id_rx, advice_tx, snap_tx, cfg, db_writer));
+    tauri::async_runtime::spawn(engine::run(event_rx, id_rx, advice_tx, snap_tx, debrief_tx, cfg, db_writer));
 }
 
 // ---------------------------------------------------------------------------

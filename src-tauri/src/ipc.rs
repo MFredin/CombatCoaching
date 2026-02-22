@@ -20,6 +20,7 @@ pub const EVENT_STATE:      &str = "coach:state";
 pub const EVENT_CONNECTION: &str = "coach:connection";
 #[allow(dead_code)] // used by TypeScript listener; emitted in future identity phase
 pub const EVENT_IDENTITY:   &str = "coach:identity";
+pub const EVENT_DEBRIEF:    &str = "coach:debrief";
 
 // ---------------------------------------------------------------------------
 // Payload types (serialised as JSON over the IPC boundary)
@@ -47,15 +48,35 @@ pub struct ConnectionStatus {
     pub wow_path:        String,
 }
 
+/// End-of-pull summary — emitted on every pull end (kill or wipe).
+/// Displayed as a 10-second debrief panel on the overlay.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PullDebrief {
+    pub pull_number:        u32,
+    /// How long the pull lasted in milliseconds.
+    pub pull_elapsed_ms:    u64,
+    /// "kill", "wipe", or "unknown"
+    pub outcome:            String,
+    /// Total hits from avoidable damage this pull.
+    pub avoidable_count:    u32,
+    /// Successful interrupts this pull.
+    pub interrupt_count:    u32,
+    /// Total advice events that fired this pull.
+    pub total_advice_fired: u32,
+    /// Number of GCD gap advice events that fired this pull.
+    pub gcd_gap_count:      u32,
+}
+
 // ---------------------------------------------------------------------------
 // IPC task
 // ---------------------------------------------------------------------------
 
-/// Drains AdviceEvent and StateSnapshot channels, emitting each to all windows.
+/// Drains AdviceEvent, StateSnapshot, and PullDebrief channels, emitting each to all windows.
 pub async fn run(
-    mut advice_rx: Receiver<AdviceEvent>,
-    mut snap_rx:   Receiver<StateSnapshot>,
-    app_handle:    AppHandle,
+    mut advice_rx:  Receiver<AdviceEvent>,
+    mut snap_rx:    Receiver<StateSnapshot>,
+    mut debrief_rx: Receiver<PullDebrief>,
+    app_handle:     AppHandle,
 ) -> Result<()> {
     loop {
         tokio::select! {
@@ -67,6 +88,11 @@ pub async fn run(
             Some(snap) = snap_rx.recv() => {
                 if let Err(e) = app_handle.emit(EVENT_STATE, &snap) {
                     tracing::error!("IPC emit state error: {}", e);
+                }
+            }
+            Some(debrief) = debrief_rx.recv() => {
+                if let Err(e) = app_handle.emit(EVENT_DEBRIEF, &debrief) {
+                    tracing::error!("IPC emit debrief error: {}", e);
                 }
             }
             else => break,

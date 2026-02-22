@@ -10,10 +10,12 @@ import {
   type StateSnapshot,
   type ConnectionStatus,
   type PlayerIdentity,
+  type PullDebrief,
   EVENT_ADVICE,
   EVENT_STATE,
   EVENT_CONNECTION,
   EVENT_IDENTITY,
+  EVENT_DEBRIEF,
 } from "../types/events";
 
 export interface TauriEventHandlers {
@@ -21,6 +23,7 @@ export interface TauriEventHandlers {
   onStateSnapshot?: (snapshot: StateSnapshot)  => void;
   onConnection?:    (status: ConnectionStatus) => void;
   onIdentity?:      (identity: PlayerIdentity) => void;
+  onDebrief?:       (debrief: PullDebrief)     => void;
 }
 
 export function useTauriEvents(handlers: TauriEventHandlers): void {
@@ -57,6 +60,13 @@ export function useTauriEvents(handlers: TauriEventHandlers): void {
         unlisten.push(
           await listen<PlayerIdentity>(EVENT_IDENTITY, (e) =>
             ref.current.onIdentity?.(e.payload)
+          )
+        );
+      }
+      if (ref.current.onDebrief) {
+        unlisten.push(
+          await listen<PullDebrief>(EVENT_DEBRIEF, (e) =>
+            ref.current.onDebrief?.(e.payload)
           )
         );
       }

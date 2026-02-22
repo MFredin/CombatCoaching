@@ -5,14 +5,16 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
-import { NowFeed }      from "./components/NowFeed";
-import { Timeline }     from "./components/Timeline";
-import { StatWidgets }  from "./components/StatWidgets";
-import { PullClock }    from "./components/PullClock";
-import { useTauriEvents } from "./hooks/useTauriEvents";
+import { NowFeed }           from "./components/NowFeed";
+import { Timeline }          from "./components/Timeline";
+import { StatWidgets }       from "./components/StatWidgets";
+import { PullClock }         from "./components/PullClock";
+import { PullDebriefPanel }  from "./components/PullDebriefPanel";
+import { useTauriEvents }    from "./hooks/useTauriEvents";
 import type {
   AdviceEvent,
   AudioCue,
+  PullDebrief,
   StateSnapshot,
   AppConfig,
   PanelPosition,
@@ -82,7 +84,8 @@ function OverlayApp() {
     interrupt_count: 0,
     encounter_name:  null,
   });
-  const [panels, setPanels] = useState<PanelPosition[]>([]);
+  const [debrief, setDebrief]   = useState<PullDebrief | null>(null);
+  const [panels, setPanels]     = useState<PanelPosition[]>([]);
   // Audio cues kept in a ref — no re-renders needed when config reloads
   const audioCuesRef = useRef<AudioCue[]>([]);
 
@@ -110,6 +113,10 @@ function OverlayApp() {
 
     onStateSnapshot: useCallback((snap: StateSnapshot) => {
       setSnapshot(snap);
+    }, []),
+
+    onDebrief: useCallback((d: PullDebrief) => {
+      setDebrief(d);
     }, []),
   });
 
@@ -149,6 +156,11 @@ function OverlayApp() {
           avoidableCount={snapshot.avoidable_count}
           interruptCount={snapshot.interrupt_count}
         />
+      </AbsPanel>
+
+      {/* Debrief panel — auto-positioned bottom-right-ish, auto-dismisses */}
+      <AbsPanel pos={pos("debrief") ?? { id: "debrief", x: 20, y: 400, visible: true }}>
+        <PullDebriefPanel debrief={debrief} />
       </AbsPanel>
     </>
   );
