@@ -62,6 +62,13 @@ export interface AppConfig {
   major_cds?:       number[];
 }
 
+export interface UpdateInfo {
+  available:       boolean;
+  current_version: string;
+  new_version:     string | null;
+  notes:           string | null;
+}
+
 /// A character found in the WTF directory tree.
 /// Mirrors config::WtfCharacter on the Rust side.
 export interface WtfCharacter {

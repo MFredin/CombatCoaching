@@ -10,6 +10,7 @@ import type {
   AppConfig,
   ConnectionStatus as ConnStatus,
   PanelPosition,
+  UpdateInfo,
   WtfCharacter,
 } from "./types/events";
 import "./styles/settings.css";
@@ -23,9 +24,11 @@ function SettingsApp() {
   const [connStatus, setConnStatus] = useState<ConnStatus>({
     log_tailing: false, addon_connected: false, wow_path: "",
   });
-  const [saving, setSaving]         = useState(false);
-  const [detectMsg, setDetectMsg]   = useState("");
-  const [wtfChars, setWtfChars]     = useState<WtfCharacter[]>([]);
+  const [saving, setSaving]           = useState(false);
+  const [detectMsg, setDetectMsg]     = useState("");
+  const [wtfChars, setWtfChars]       = useState<WtfCharacter[]>([]);
+  const [updateInfo, setUpdateInfo]   = useState<UpdateInfo | null>(null);
+  const [updateChecking, setChecking] = useState(false);
 
   // Load config on mount
   useEffect(() => {
@@ -92,6 +95,31 @@ function SettingsApp() {
     }
   }
 
+  async function checkForUpdates() {
+    setChecking(true);
+    setUpdateInfo(null);
+    try {
+      const info = await invoke<UpdateInfo>("check_for_update");
+      setUpdateInfo(info);
+    } catch (e) {
+      setUpdateInfo({
+        available: false,
+        current_version: "?",
+        new_version: null,
+        notes: String(e),
+      });
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  // Auto-check for updates 5 seconds after the UI loads (non-blocking)
+  useEffect(() => {
+    const t = setTimeout(() => { void checkForUpdates(); }, 5_000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function updatePanels(positions: PanelPosition[]) {
     const updated = { ...config, panel_positions: positions };
     setConfig(updated);
@@ -112,7 +140,7 @@ function SettingsApp() {
       <aside style={{ borderRight: "1px solid var(--stroke)", overflow: "auto" }}>
         <div style={{ padding: "16px", borderBottom: "1px solid var(--stroke)" }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>CombatLedger</div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>Live Coach v0.1</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>Live Coach v0.2</div>
         </div>
         <div className="section">
           <h3>Connection</h3>
@@ -189,6 +217,31 @@ function SettingsApp() {
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
             {intensityLabels[config.intensity ?? 3] ?? ""}
           </div>
+        </div>
+        <div className="section">
+          <h3>Updates</h3>
+          {updateInfo?.available ? (
+            <div style={{ fontSize: 11, marginBottom: 8 }}>
+              <div style={{ color: "#4caf50", fontWeight: 600, marginBottom: 4 }}>
+                ✓ Update available: v{updateInfo.new_version}
+              </div>
+              {updateInfo.notes && (
+                <div style={{ color: "var(--muted)", whiteSpace: "pre-wrap", marginBottom: 6, maxHeight: 80, overflow: "auto" }}>
+                  {updateInfo.notes}
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: "var(--muted)" }}>
+                Restart the app after installing to apply the update.
+              </div>
+            </div>
+          ) : updateInfo && !updateInfo.available ? (
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
+              ✓ Up to date (v{updateInfo.current_version})
+            </div>
+          ) : null}
+          <button onClick={checkForUpdates} disabled={updateChecking}>
+            {updateChecking ? "Checking…" : "Check for Updates"}
+          </button>
         </div>
       </aside>
 
