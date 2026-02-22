@@ -205,7 +205,7 @@ pub fn get_config(app_handle: tauri::AppHandle) -> Result<AppConfig, String> {
     load_or_default(&dir).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[allow(dead_code)] // replaced in invoke_handler by lib.rs::save_config (avoids __cmd__ symbol collision)
 pub fn save_config(app_handle: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
     let dir = app_handle
         .path()
