@@ -1,6 +1,6 @@
 [package]
 name    = "combat-ledger-live-coach"
-version = "0.9.1"
+version = "0.9.2"
 edition = "2021"
 
 [lib]
@@ -12,9 +12,10 @@ name = "combat-ledger-live-coach"
 path = "src/main.rs"
 
 [dependencies]
-tauri                = { version = "2", features = [] }
-tauri-plugin-dialog  = "2"
-tauri-plugin-shell   = "2"
+tauri                        = { version = "2", features = [] }
+tauri-plugin-dialog          = "2"
+tauri-plugin-shell           = "2"
+tauri-plugin-global-shortcut = "2"
 ureq                 = "2"
 tokio                = { version = "1", features = ["full"] }
 notify               = "6"

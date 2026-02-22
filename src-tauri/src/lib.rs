@@ -73,6 +73,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::init())
         // tauri-plugin-updater intentionally omitted — requires a signing key pair.
         // Update checks use the check_for_update command below (GitHub API via reqwest).
         // TODO: generate a keypair and re-enable tauri-plugin-updater for auto-install.
@@ -117,6 +118,10 @@ pub fn run() {
             let db_writer = db::spawn_db_writer(&db_path)?;
 
             let handle = app.handle().clone();
+
+            // --- Register global hotkey from config ---
+            // Done after the handle is cloned so the shortcut handler can clone it.
+            register_global_hotkey(&handle, &cfg.hotkeys.toggle_overlay);
 
             // --- If paths are configured, start the pipeline ---
             // On first run paths will be empty; the settings UI wizard saves them.
@@ -166,6 +171,8 @@ pub fn run() {
             toggle_overlay,
             get_pull_history,
             read_audio_file,
+            register_hotkey,
+            open_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -302,6 +309,126 @@ fn toggle_overlay(app: tauri::AppHandle) -> Result<bool, String> {
     }
 
     Ok(new_visible)
+}
+
+// ---------------------------------------------------------------------------
+// Global hotkey helpers
+// ---------------------------------------------------------------------------
+
+/// Convert a user-recorded combo string (e.g. "Ctrl+Shift+O") into a typed
+/// `tauri_plugin_global_shortcut::Shortcut`.
+///
+/// Supported modifiers: Ctrl, Shift, Alt, Meta/Win/Super
+/// Supported keys:      A-Z, F1-F12
+///
+/// Returns Err if the combo contains an unsupported token.
+fn user_combo_to_shortcut(
+    combo: &str,
+) -> Result<tauri_plugin_global_shortcut::Shortcut, String> {
+    use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+
+    let mut mods: Modifiers  = Modifiers::empty();
+    let mut code: Option<Code> = None;
+
+    for part in combo.split('+') {
+        match part.to_ascii_lowercase().as_str() {
+            "ctrl" | "control"       => mods |= Modifiers::CONTROL,
+            "shift"                  => mods |= Modifiers::SHIFT,
+            "alt"                    => mods |= Modifiers::ALT,
+            "meta" | "win" | "super" => mods |= Modifiers::SUPER,
+            k if k.len() == 1 => {
+                code = Some(match k.to_ascii_uppercase().as_str() {
+                    "A" => Code::KeyA, "B" => Code::KeyB, "C" => Code::KeyC,
+                    "D" => Code::KeyD, "E" => Code::KeyE, "F" => Code::KeyF,
+                    "G" => Code::KeyG, "H" => Code::KeyH, "I" => Code::KeyI,
+                    "J" => Code::KeyJ, "K" => Code::KeyK, "L" => Code::KeyL,
+                    "M" => Code::KeyM, "N" => Code::KeyN, "O" => Code::KeyO,
+                    "P" => Code::KeyP, "Q" => Code::KeyQ, "R" => Code::KeyR,
+                    "S" => Code::KeyS, "T" => Code::KeyT, "U" => Code::KeyU,
+                    "V" => Code::KeyV, "W" => Code::KeyW, "X" => Code::KeyX,
+                    "Y" => Code::KeyY, "Z" => Code::KeyZ,
+                    _ => return Err(format!("Unsupported key '{}'", k)),
+                });
+            }
+            k => {
+                code = Some(match k {
+                    "f1"  => Code::F1,  "f2"  => Code::F2,  "f3"  => Code::F3,
+                    "f4"  => Code::F4,  "f5"  => Code::F5,  "f6"  => Code::F6,
+                    "f7"  => Code::F7,  "f8"  => Code::F8,  "f9"  => Code::F9,
+                    "f10" => Code::F10, "f11" => Code::F11, "f12" => Code::F12,
+                    _ => return Err(format!("Unsupported token '{}'", k)),
+                });
+            }
+        }
+    }
+
+    let c = code.ok_or_else(|| format!("No key specified in combo '{}'", combo))?;
+    Ok(Shortcut::new(if mods.is_empty() { None } else { Some(mods) }, c))
+}
+
+/// Register (or clear) the overlay-toggle global hotkey.
+/// Unregisters all existing hotkeys first to prevent duplicates on re-call.
+fn register_global_hotkey(app: &tauri::AppHandle, combo: &str) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    if let Err(e) = app.global_shortcut().unregister_all() {
+        tracing::warn!("Hotkey unregister_all error: {}", e);
+    }
+
+    if combo.is_empty() {
+        tracing::info!("Global hotkey cleared");
+        return;
+    }
+
+    match user_combo_to_shortcut(combo) {
+        Err(e) => tracing::warn!("Invalid hotkey combo '{}': {}", combo, e),
+        Ok(shortcut) => {
+            let h = app.clone();
+            if let Err(e) = app.global_shortcut().register(
+                shortcut,
+                move |_app, _sc, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        if let Some(ov) = h.get_webview_window("overlay") {
+                            let vis = ov.is_visible().unwrap_or(false);
+                            if vis { let _ = ov.hide(); } else { let _ = ov.show(); }
+                        }
+                    }
+                },
+            ) {
+                tracing::warn!("Hotkey register failed for '{}': {}", combo, e);
+            } else {
+                tracing::info!("Global hotkey registered: {}", combo);
+            }
+        }
+    }
+}
+
+/// Re-register the overlay toggle hotkey from the settings window.
+/// Called after the user records a new combo and saves it.
+/// Passing an empty combo clears the hotkey.
+#[tauri::command]
+fn register_hotkey(app: tauri::AppHandle, combo: String) -> Result<(), String> {
+    register_global_hotkey(&app, &combo);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Shell helper — open a URL in the user's default browser
+// ---------------------------------------------------------------------------
+
+/// Open a URL (or file) in the default browser / associated application.
+/// Uses the Windows `start` command so no extra crate is required.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", &url])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open URL: {}", e))?;
+    #[cfg(not(target_os = "windows"))]
+    let _ = url; // cross-platform stub — app only ships on Windows
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

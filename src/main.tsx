@@ -189,7 +189,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v0.9.1
+            Live Coach v0.9.2
           </div>
         </div>
 
@@ -397,7 +397,14 @@ function HomeTab({
                   {updateInfo.notes}
                 </div>
               )}
-              <div style={{ fontSize: 10, color: "var(--muted)" }}>Restart the app after installing.</div>
+              <button
+                style={{ fontSize: 11, padding: "5px 12px", marginBottom: 6, width: "100%" }}
+                className="primary"
+                onClick={() => void invoke("open_url", { url: "https://github.com/MFredin/CombatCoaching/releases/latest" })}
+              >
+                ↓ Download v{updateInfo.new_version}
+              </button>
+              <div style={{ fontSize: 10, color: "var(--muted)" }}>Run the installer, then restart.</div>
             </div>
           ) : updateInfo && !updateInfo.available ? (
             <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
@@ -741,6 +748,7 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
       setCombo(newCombo);
       setRecording(false);
       void save({ ...config, hotkeys: { ...(config.hotkeys ?? { toggle_overlay: "" }), toggle_overlay: newCombo } });
+      void invoke("register_hotkey", { combo: newCombo });
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -749,6 +757,7 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
   function clearHotkey() {
     setCombo("");
     void save({ ...config, hotkeys: { ...(config.hotkeys ?? { toggle_overlay: "" }), toggle_overlay: "" } });
+    void invoke("register_hotkey", { combo: "" });
   }
 
   return (
@@ -758,12 +767,12 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
         Record keyboard shortcuts for quick control. Bindings are saved to config.
       </p>
       <div style={{
-        background: "rgba(255,255,255,0.05)", border: "1px solid var(--warn)",
-        borderRadius: 8, padding: "10px 14px", marginBottom: 24, fontSize: 12, color: "var(--warn)",
+        background: "rgba(43,213,118,0.06)", border: "1px solid var(--good)",
+        borderRadius: 8, padding: "10px 14px", marginBottom: 24, fontSize: 12, color: "var(--good)",
       }}>
-        ⚠ Global hotkeys (active while WoW is in the foreground) require
-        tauri-plugin-global-shortcut, planned for a future release.
-        Use the <strong>Overlay ON/OFF</strong> button in the top bar in the meantime.
+        ✓ Global hotkeys are active. The recorded shortcut works system-wide
+        while the app is running, including when WoW is in the foreground.
+        Changes take effect immediately — no restart needed.
       </div>
 
       {/* Toggle overlay hotkey */}

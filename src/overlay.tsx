@@ -178,8 +178,21 @@ function OverlayApp() {
   const pos = (id: string): PanelPosition =>
     panels.find((p) => p.id === id) ?? { id, x: 20, y: 80, visible: true };
 
+  // Quiet mode: fade the entire overlay out when out of combat so it doesn't
+  // clutter the screen while navigating, looting, etc.  A slow transition
+  // (2 s) prevents jarring flicker on brief combat state toggles.
+  const quietOpacity = snapshot.in_combat ? 1.0 : 0.15;
+
   return (
-    <>
+    <div
+      style={{
+        position:   "fixed",
+        inset:      0,
+        opacity:    quietOpacity,
+        transition: "opacity 2s ease-in-out",
+        pointerEvents: "none",
+      }}
+    >
       <AbsPanel pos={pos("pull_clock")}>
         <PullClock
           elapsedMs={snapshot.pull_elapsed_ms}
@@ -208,7 +221,7 @@ function OverlayApp() {
       <AbsPanel pos={pos("debrief") ?? { id: "debrief", x: 20, y: 400, visible: true }}>
         <PullDebriefPanel debrief={debrief} />
       </AbsPanel>
-    </>
+    </div>
   );
 }
 
