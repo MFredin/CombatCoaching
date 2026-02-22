@@ -9,8 +9,36 @@ mod specs;
 mod state;
 mod tailer;
 
-use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
+};
+use tauri::{Manager, PhysicalPosition, PhysicalSize};
 use tokio::sync::mpsc;
+
+// ---------------------------------------------------------------------------
+// Pipeline state — stored in Tauri managed state so try_start_pipeline() can
+// be called from both setup() (on startup) and save_config (on first-run save).
+// ---------------------------------------------------------------------------
+
+/// All channel ends + db handle needed to start the pipeline.
+/// Wrapped in `Mutex<Option<…>>` so `Option::take()` in try_start_pipeline
+/// ensures we only ever spawn the pipeline once.
+struct PipelineBundle {
+    raw_tx:     mpsc::Sender<String>,
+    raw_rx:     mpsc::Receiver<String>,
+    event_tx:   mpsc::Sender<parser::LogEvent>,
+    event_rx:   mpsc::Receiver<parser::LogEvent>,
+    id_tx:      mpsc::Sender<identity::PlayerIdentity>,
+    id_rx:      mpsc::Receiver<identity::PlayerIdentity>,
+    advice_tx:  mpsc::Sender<engine::AdviceEvent>,
+    advice_rx:  mpsc::Receiver<engine::AdviceEvent>,
+    snap_tx:    mpsc::Sender<ipc::StateSnapshot>,
+    snap_rx:    mpsc::Receiver<ipc::StateSnapshot>,
+    debrief_tx: mpsc::Sender<ipc::PullDebrief>,
+    debrief_rx: mpsc::Receiver<ipc::PullDebrief>,
+    db_writer:  db::DbWriter,
+}
 
 pub fn run() {
     // -----------------------------------------------------------------------
@@ -118,56 +146,47 @@ pub fn run() {
 
             // --- Build inter-module async channels ---
             // Pipeline: tailer -> parser -> engine -> ipc
-            let (raw_tx,  raw_rx)        = mpsc::channel::<String>(2048);
-            let (event_tx, event_rx)     = mpsc::channel::<parser::LogEvent>(1024);
-            let (advice_tx, advice_rx)   = mpsc::channel::<engine::AdviceEvent>(128);
-            let (id_tx,   id_rx)         = mpsc::channel::<identity::PlayerIdentity>(16);
-            // State snapshots emitted by engine for UI widgets
-            let (snap_tx, snap_rx)       = mpsc::channel::<ipc::StateSnapshot>(128);
-            // Pull debrief emitted by engine on pull end
+            // All channel ends are bundled together and stored in managed state.
+            // try_start_pipeline() takes the bundle and spawns all tasks atomically,
+            // so ipc::run is never live without its corresponding senders being held
+            // by the engine/tailer/identity tasks.
+            let (raw_tx,     raw_rx)     = mpsc::channel::<String>(2048);
+            let (event_tx,   event_rx)   = mpsc::channel::<parser::LogEvent>(1024);
+            let (advice_tx,  advice_rx)  = mpsc::channel::<engine::AdviceEvent>(128);
+            let (id_tx,      id_rx)      = mpsc::channel::<identity::PlayerIdentity>(16);
+            let (snap_tx,    snap_rx)    = mpsc::channel::<ipc::StateSnapshot>(128);
             let (debrief_tx, debrief_rx) = mpsc::channel::<ipc::PullDebrief>(16);
 
             // --- SQLite ---
             let db_path  = app.path().app_data_dir()?.join("sessions.sqlite");
             let db_writer = db::spawn_db_writer(&db_path)?;
 
+            // --- Store bundle + ready-flag in managed state ---
+            let bundle = PipelineBundle {
+                raw_tx, raw_rx,
+                event_tx, event_rx,
+                id_tx, id_rx,
+                advice_tx, advice_rx,
+                snap_tx, snap_rx,
+                debrief_tx, debrief_rx,
+                db_writer,
+            };
+            app.manage(Mutex::new(Some(bundle)));
+            app.manage(AtomicBool::new(false)); // pipeline-running gate
+
             let handle = app.handle().clone();
 
             // --- Register global hotkey from config ---
-            // Done after the handle is cloned so the shortcut handler can clone it.
             register_global_hotkey(&handle, &cfg.hotkeys.toggle_overlay);
 
-            // --- If paths are configured, start the pipeline ---
-            // On first run paths will be empty; the settings UI wizard saves them.
+            // --- If path is already configured, start the pipeline immediately ---
+            // On first run the path is empty; it will be set by the settings wizard.
+            // The save_config command calls try_start_pipeline after persisting the path.
             if !cfg.wow_log_path.as_os_str().is_empty() {
-                let wow_path_str = cfg.wow_log_path.to_string_lossy().to_string();
-                start_pipeline(
-                    cfg.clone(),
-                    handle.clone(),
-                    wow_path_str,
-                    raw_tx,
-                    raw_rx,
-                    event_tx,
-                    event_rx,
-                    advice_tx,
-                    id_tx,
-                    id_rx,
-                    snap_tx,
-                    debrief_tx,
-                    db_writer,
-                );
+                try_start_pipeline(&handle);
             } else {
                 tracing::info!("No WoW path configured — waiting for first-run setup");
-                let _ = handle.emit(ipc::EVENT_CONNECTION, ipc::ConnectionStatus {
-                    log_tailing:     false,
-                    addon_connected: false,
-                    wow_path:        String::new(),
-                });
             }
-
-            // IPC task always runs (relays advice + snapshots + debriefs to frontend)
-            let ipc_handle = app.handle().clone();
-            tauri::async_runtime::spawn(ipc::run(advice_rx, snap_rx, debrief_rx, ipc_handle));
 
             // Show overlay after setup
             overlay.show()?;
@@ -176,7 +195,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             config::get_config,
-            config::save_config,
+            save_config,
             config::detect_wow_path,
             config::list_wtf_characters,
             config::list_specs,
@@ -192,34 +211,76 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// Spawns all async pipeline tasks.
-fn start_pipeline(
-    cfg: config::AppConfig,
-    app_handle: tauri::AppHandle,
-    wow_path_str: String,
-    raw_tx: mpsc::Sender<String>,
-    raw_rx: mpsc::Receiver<String>,
-    event_tx: mpsc::Sender<parser::LogEvent>,
-    event_rx: mpsc::Receiver<parser::LogEvent>,
-    advice_tx: mpsc::Sender<engine::AdviceEvent>,
-    id_tx: mpsc::Sender<identity::PlayerIdentity>,
-    id_rx: mpsc::Receiver<identity::PlayerIdentity>,
-    snap_tx: mpsc::Sender<ipc::StateSnapshot>,
-    debrief_tx: mpsc::Sender<ipc::PullDebrief>,
-    db_writer: db::DbWriter,
-) {
-    let wow_log_path  = cfg.wow_log_path.clone();
-    let addon_sv_path = cfg.addon_sv_path.clone();
+/// Try to start the async pipeline tasks.
+///
+/// This is a no-op if:
+/// - `wow_log_path` is not yet configured (returns immediately; called again after save)
+/// - The pipeline is already running (`AtomicBool` CAS prevents double-start)
+///
+/// On first call with a valid path, takes the `PipelineBundle` from managed state
+/// (can only happen once) and spawns all 5 tasks together — including `ipc::run` —
+/// so the IPC relay is always live alongside the tasks that feed it.
+fn try_start_pipeline(app: &tauri::AppHandle) {
+    // Re-read config from disk so we get the path saved most recently by save_config.
+    let config_dir = match app.path().app_config_dir() {
+        Ok(d) => d,
+        Err(e) => { tracing::error!("try_start_pipeline: cannot resolve config dir: {}", e); return; }
+    };
+    let cfg = match config::load_or_default(&config_dir) {
+        Ok(c) => c,
+        Err(e) => { tracing::error!("try_start_pipeline: config load failed: {}", e); return; }
+    };
 
-    tauri::async_runtime::spawn(tailer::run(
-        wow_log_path,
-        raw_tx,
-        app_handle.clone(),
-        wow_path_str,
-    ));
-    tauri::async_runtime::spawn(parser::run(raw_rx, event_tx));
-    tauri::async_runtime::spawn(identity::run(addon_sv_path, id_tx, app_handle));
-    tauri::async_runtime::spawn(engine::run(event_rx, id_rx, advice_tx, snap_tx, debrief_tx, cfg, db_writer));
+    if cfg.wow_log_path.as_os_str().is_empty() {
+        tracing::info!("try_start_pipeline: wow_log_path not yet set — skipping");
+        return;
+    }
+
+    // CAS: mark pipeline as running.  If it was already true, another call beat us.
+    let ready: tauri::State<AtomicBool> = app.state();
+    if ready.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        tracing::info!("try_start_pipeline: pipeline already running — skipping");
+        return;
+    }
+
+    // Take the bundle (single-use — None after this point).
+    let bundle_state: tauri::State<Mutex<Option<PipelineBundle>>> = app.state();
+    let bundle = {
+        let mut guard = bundle_state.lock().unwrap();
+        guard.take()
+    };
+    let Some(b) = bundle else {
+        tracing::warn!("try_start_pipeline: bundle already consumed (double-start prevented)");
+        return;
+    };
+
+    let wow_path_str = cfg.wow_log_path.to_string_lossy().to_string();
+    let h = app.clone();
+
+    tauri::async_runtime::spawn(tailer::run(cfg.wow_log_path.clone(), b.raw_tx, h.clone(), wow_path_str));
+    tauri::async_runtime::spawn(parser::run(b.raw_rx, b.event_tx));
+    tauri::async_runtime::spawn(identity::run(cfg.addon_sv_path.clone(), b.id_tx, h.clone()));
+    tauri::async_runtime::spawn(engine::run(b.event_rx, b.id_rx, b.advice_tx, b.snap_tx, b.debrief_tx, cfg, b.db_writer));
+    tauri::async_runtime::spawn(ipc::run(b.advice_rx, b.snap_rx, b.debrief_rx, h));
+
+    tracing::info!("Pipeline started successfully");
+}
+
+// ---------------------------------------------------------------------------
+// save_config — wraps config::save + try_start_pipeline so the pipeline
+// starts automatically the first time the user sets their WoW log path,
+// without requiring an app restart.
+// ---------------------------------------------------------------------------
+
+/// Save the settings config to disk, then attempt to start the pipeline.
+/// Replaces `config::save_config` in the invoke_handler so try_start_pipeline
+/// is always called after a successful save.
+#[tauri::command]
+fn save_config(app: tauri::AppHandle, config: config::AppConfig) -> Result<(), String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    config::save(&config, &dir).map_err(|e| e.to_string())?;
+    try_start_pipeline(&app);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

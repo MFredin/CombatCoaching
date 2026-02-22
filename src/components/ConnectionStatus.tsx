@@ -1,4 +1,4 @@
-// Shows two status indicators: log tailing and addon handshake.
+// Shows the log-tailing connection status indicator.
 import type { ConnectionStatus as Status } from "../types/events";
 import styles from "./ConnectionStatus.module.css";
 
@@ -9,8 +9,7 @@ interface Props {
 export function ConnectionStatus({ status }: Props) {
   return (
     <div className={styles.wrap}>
-      <Pill label="LOG"    on={status.log_tailing}     />
-      <Pill label="ADDON"  on={status.addon_connected}  />
+      <Pill label="LOG" on={status.log_tailing} />
     </div>
   );
 }
