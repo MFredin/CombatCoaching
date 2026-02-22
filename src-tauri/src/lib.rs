@@ -73,7 +73,21 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_global_shortcut::init())
+        .plugin(
+            // v2.3.1 API: handler is registered at build time; register() only
+            // takes the shortcut with no callback.
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    use tauri_plugin_global_shortcut::ShortcutState;
+                    if event.state() == ShortcutState::Pressed {
+                        if let Some(ov) = app.get_webview_window("overlay") {
+                            let vis = ov.is_visible().unwrap_or(false);
+                            if vis { let _ = ov.hide(); } else { let _ = ov.show(); }
+                        }
+                    }
+                })
+                .build()
+        )
         // tauri-plugin-updater intentionally omitted — requires a signing key pair.
         // Update checks use the check_for_update command below (GitHub API via reqwest).
         // TODO: generate a keypair and re-enable tauri-plugin-updater for auto-install.
@@ -369,7 +383,7 @@ fn user_combo_to_shortcut(
 /// Register (or clear) the overlay-toggle global hotkey.
 /// Unregisters all existing hotkeys first to prevent duplicates on re-call.
 fn register_global_hotkey(app: &tauri::AppHandle, combo: &str) {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
     if let Err(e) = app.global_shortcut().unregister_all() {
         tracing::warn!("Hotkey unregister_all error: {}", e);
@@ -383,18 +397,9 @@ fn register_global_hotkey(app: &tauri::AppHandle, combo: &str) {
     match user_combo_to_shortcut(combo) {
         Err(e) => tracing::warn!("Invalid hotkey combo '{}': {}", combo, e),
         Ok(shortcut) => {
-            let h = app.clone();
-            if let Err(e) = app.global_shortcut().register(
-                shortcut,
-                move |_app, _sc, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        if let Some(ov) = h.get_webview_window("overlay") {
-                            let vis = ov.is_visible().unwrap_or(false);
-                            if vis { let _ = ov.hide(); } else { let _ = ov.show(); }
-                        }
-                    }
-                },
-            ) {
+            // v2.3.1: register() takes only the shortcut; the handler was
+            // supplied to Builder::with_handler() at plugin construction time.
+            if let Err(e) = app.global_shortcut().register(shortcut) {
                 tracing::warn!("Hotkey register failed for '{}': {}", combo, e);
             } else {
                 tracing::info!("Global hotkey registered: {}", combo);
