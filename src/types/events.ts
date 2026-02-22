@@ -60,6 +60,9 @@ export interface AppConfig {
   player_focus?:    string;
   panel_positions?: PanelPosition[];
   major_cds?:       number[];
+  audio_cues?:      AudioCue[];
+  hotkeys?:         HotkeyConfig;
+  overlay_visible?: boolean;
 }
 
 export interface UpdateInfo {
@@ -67,6 +70,17 @@ export interface UpdateInfo {
   current_version: string;
   new_version:     string | null;
   notes:           string | null;
+}
+
+export interface AudioCue {
+  severity:   string;   // "good" | "warn" | "bad"
+  enabled:    boolean;
+  volume:     number;   // 0.0–1.0
+  sound_path: string;   // empty = built-in beep
+}
+
+export interface HotkeyConfig {
+  toggle_overlay: string; // e.g. "Ctrl+Shift+O", empty = none
 }
 
 /// A character found in the WTF directory tree.

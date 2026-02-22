@@ -18,6 +18,61 @@ use tauri::Manager; // required for AppHandle::path() and app_config_dir()
 // AppConfig
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Audio cues
+// ---------------------------------------------------------------------------
+
+/// Per-severity audio cue configuration.
+/// Each severity ("good", "warn", "bad") can have its own sound file and volume.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioCue {
+    /// Severity this cue applies to: "good", "warn", or "bad"
+    pub severity: String,
+    /// Whether this cue is enabled
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
+    /// Volume 0.0–1.0
+    #[serde(default = "default_volume")]
+    pub volume: f32,
+    /// Optional path to a custom .wav/.mp3 file; empty = use built-in beep
+    #[serde(default)]
+    pub sound_path: String,
+}
+
+fn bool_true() -> bool { true }
+fn default_volume() -> f32 { 0.7 }
+
+fn default_audio_cues() -> Vec<AudioCue> {
+    vec![
+        AudioCue { severity: "good".to_owned(), enabled: true,  volume: 0.6, sound_path: String::new() },
+        AudioCue { severity: "warn".to_owned(), enabled: true,  volume: 0.7, sound_path: String::new() },
+        AudioCue { severity: "bad".to_owned(),  enabled: true,  volume: 0.8, sound_path: String::new() },
+    ]
+}
+
+// ---------------------------------------------------------------------------
+// Hotkeys
+// ---------------------------------------------------------------------------
+
+/// Global hotkey configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HotkeyConfig {
+    /// Key combo string for toggling overlay visibility (e.g. "Ctrl+Shift+O").
+    /// Empty string = no hotkey registered.
+    #[serde(default)]
+    pub toggle_overlay: String,
+}
+
+impl Default for HotkeyConfig {
+    fn default() -> Self {
+        Self { toggle_overlay: String::new() }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Panel positions
+// ---------------------------------------------------------------------------
+
 /// Position, visibility, and appearance of a single overlay panel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PanelPosition {
@@ -66,6 +121,18 @@ pub struct AppConfig {
     /// Loaded from data/specs/<class>_<spec>.toml when the user selects a spec.
     #[serde(default)]
     pub major_cds: Vec<u32>,
+
+    /// Per-severity audio cue settings.
+    #[serde(default = "default_audio_cues")]
+    pub audio_cues: Vec<AudioCue>,
+
+    /// Global hotkey bindings.
+    #[serde(default)]
+    pub hotkeys: HotkeyConfig,
+
+    /// Whether the overlay is currently visible (persisted so it survives restart).
+    #[serde(default = "bool_true")]
+    pub overlay_visible: bool,
 }
 
 fn default_intensity() -> u8 { 3 }
@@ -88,6 +155,9 @@ impl Default for AppConfig {
             player_focus:    String::new(),
             panel_positions: default_panel_positions(),
             major_cds:       Vec::new(),
+            audio_cues:      default_audio_cues(),
+            hotkeys:         HotkeyConfig::default(),
+            overlay_visible: true,
         }
     }
 }

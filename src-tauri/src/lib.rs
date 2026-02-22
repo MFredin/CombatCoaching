@@ -162,6 +162,7 @@ pub fn run() {
             config::detect_wow_path,
             config::list_wtf_characters,
             check_for_update,
+            toggle_overlay,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -253,4 +254,46 @@ async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
             Err(format!("Updater not configured: {}", e))
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Overlay visibility toggle — called by the frontend hotkey button and by
+// the global hotkey handler (future: tauri-plugin-global-shortcut).
+// ---------------------------------------------------------------------------
+
+/// Show or hide the overlay window. Persists the new state to config so it
+/// survives restarts. Returns the new visibility state (true = visible).
+#[tauri::command]
+fn toggle_overlay(app: tauri::AppHandle) -> Result<bool, String> {
+    let overlay = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "Overlay window not found".to_string())?;
+
+    let currently_visible = overlay.is_visible().map_err(|e| e.to_string())?;
+    let new_visible = !currently_visible;
+
+    if new_visible {
+        overlay.show().map_err(|e| e.to_string())?;
+    } else {
+        overlay.hide().map_err(|e| e.to_string())?;
+    }
+
+    tracing::info!("Overlay toggled: visible={}", new_visible);
+
+    // Persist to config
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        if let Ok(mut cfg) = config::load_or_default(&config_dir) {
+            cfg.overlay_visible = new_visible;
+            let _ = invoke_save(&cfg, &config_dir);
+        }
+    }
+
+    Ok(new_visible)
+}
+
+fn invoke_save(cfg: &config::AppConfig, config_dir: &std::path::Path) -> anyhow::Result<()> {
+    let raw = toml::to_string_pretty(cfg)
+        .map_err(|e| anyhow::anyhow!("Config serialize error: {}", e))?;
+    std::fs::write(config_dir.join("config.toml"), raw)?;
+    Ok(())
 }
