@@ -173,7 +173,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v0.8
+            Live Coach v0.8.1
           </div>
         </div>
 
@@ -771,4 +771,67 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
   );
 }
 
-createRoot(document.getElementById("root")!).render(<SettingsApp />);
+// ---------------------------------------------------------------------------
+// Error Boundary — catches render errors and shows them instead of blank
+// ---------------------------------------------------------------------------
+interface EBState { error: Error | null }
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error): EBState { return { error }; }
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[ErrorBoundary]", error, info);
+  }
+  override render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          padding: 32, color: "#ff5c77", fontFamily: "monospace",
+          background: "#0b0f18", minHeight: "100vh",
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+            ⚠ Render error — please screenshot this and report it
+          </div>
+          <div style={{ fontSize: 13, marginBottom: 8 }}>
+            {this.state.error.message}
+          </div>
+          <pre style={{ fontSize: 11, color: "#a9b6d6", whiteSpace: "pre-wrap", overflow: "auto" }}>
+            {this.state.error.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Catch errors that happen outside the React tree (module load, async, etc.)
+window.addEventListener("error", (e) => {
+  const root = document.getElementById("root");
+  if (root && root.childNodes.length === 0) {
+    root.innerHTML = `<div style="padding:32px;color:#ff5c77;font-family:monospace;background:#0b0f18;min-height:100vh">
+      <div style="font-size:16px;font-weight:700;margin-bottom:12px">⚠ Uncaught error — please screenshot this</div>
+      <div style="font-size:13px;margin-bottom:8px">${e.message}</div>
+      <pre style="font-size:11px;color:#a9b6d6;white-space:pre-wrap">${e.filename}:${e.lineno}\n${e.error?.stack ?? ""}</pre>
+    </div>`;
+  }
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("[unhandledrejection]", e.reason);
+  const root = document.getElementById("root");
+  if (root && root.childNodes.length === 0) {
+    root.innerHTML = `<div style="padding:32px;color:#ff5c77;font-family:monospace;background:#0b0f18;min-height:100vh">
+      <div style="font-size:16px;font-weight:700;margin-bottom:12px">⚠ Unhandled Promise rejection — please screenshot this</div>
+      <pre style="font-size:11px;color:#a9b6d6;white-space:pre-wrap">${String(e.reason)}</pre>
+    </div>`;
+  }
+});
+
+createRoot(document.getElementById("root")!).render(
+  <ErrorBoundary>
+    <SettingsApp />
+  </ErrorBoundary>
+);
