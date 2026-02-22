@@ -7,7 +7,6 @@
 // caused React error #310 (invalid hook call) in the production build.
 // Drag-and-drop will be re-added in a future release once the dependency
 // conflict is resolved. For now X/Y are set via number inputs.
-import React from "react";
 import type { PanelPosition } from "../types/events";
 import styles from "./OverlayLayoutEditor.module.css";
 
