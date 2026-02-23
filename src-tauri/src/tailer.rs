@@ -217,6 +217,17 @@ pub fn run(
                                 .unwrap_or(false)
                         });
                         if is_combat_log {
+                            // Drain the OLD file first.  When the CombatCoach addon
+                            // cycles LoggingCombat(false→true) every second, WoW
+                            // closes the old file (flushing the write buffer) and
+                            // immediately creates a new one.  The Modify event for
+                            // the final flush and the Create event for the new file
+                            // arrive nearly simultaneously; the Create can be
+                            // processed first, so we must read any remaining bytes
+                            // from the old file before switching to the new one.
+                            if let Err(e) = state.read_new_lines(&tx) {
+                                tracing::warn!("Tailer pre-switch drain error: {}", e);
+                            }
                             let was_tailing = state.active_file.is_some();
                             state.check_for_new_log();
                             // Emit updated status when we first pick up a log file

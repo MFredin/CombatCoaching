@@ -1,8 +1,9 @@
+## Interface-Retail: 120001
 ## Interface: 110105
 ## Title: CombatCoach
-## Notes: Identity handshake for the CombatLedger Live Coach companion app. Writes player GUID, name, realm, class, and spec to SavedVariables. No combat log processing — all parsing happens in the companion app.
+## Notes: Companion addon for CombatLedger Live Coach. Writes player identity to SavedVariables and flushes the combat log to disk every second during combat so the app can read events in near-real-time.
 ## Author: CombatLedger
-## Version: 0.1.0
+## Version: 1.1.0
 ## SavedVariables: CombatCoachDB
 
 CombatCoach.lua
