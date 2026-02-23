@@ -1,27 +1,32 @@
 /// Parses raw WoW combat log lines into typed `LogEvent` structs.
 ///
-/// WoW combat log format (The War Within / Midnight, 11.x+):
+/// WoW combat log format (12.0.1+, hidecaster field removed):
 ///
-///   TIMESTAMP  SUBEVENT,HIDECASTER,SOURCEGUID,SOURCENAME,SOURCEFLAGS,SOURCERAIDFLAGS,
-///              DESTGUID,DESTNAME,DESTFLAGS,DESTROAIDFLAGS,[subevent-specific fields...]
+///   TIMESTAMP  SUBEVENT,SOURCEGUID,SOURCENAME,SOURCEFLAGS,SOURCERAIDFLAGS,
+///              DESTGUID,DESTNAME,DESTFLAGS,DESTROAIDFLAGS,
+///              [SPELLID,SPELLNAME,SPELLSCHOOL,]    ← SPELL_* events only
+///              [19 advanced unit-state fields,]     ← ADVANCED_LOG_ENABLED=1
+///              [subevent-specific fields...]
 ///
-/// Field indices (0-based after splitting on comma):
+/// Field indices (0-based, WoW 12.0.1 — hidecaster removed):
 ///   [0]  subevent name (e.g. "SPELL_DAMAGE")
-///   [1]  hidecaster (0 or 1)
-///   [2]  source GUID
-///   [3]  source name (quoted)
-///   [4]  source flags
-///   [5]  source raid flags
-///   [6]  dest GUID
-///   [7]  dest name (quoted)
-///   [8]  dest flags
-///   [9]  dest raid flags
-///   [10] spell ID       (prefix fields for SPELL_* events)
-///   [11] spell name     (quoted)
-///   [12] spell school
-///   [13+] subevent-specific
+///   [1]  source GUID
+///   [2]  source name (quoted)
+///   [3]  source flags
+///   [4]  source raid flags
+///   [5]  dest GUID
+///   [6]  dest name (quoted)
+///   [7]  dest flags
+///   [8]  dest raid flags
+///   [9]  spell ID       (prefix fields, SPELL_* events only)
+///   [10] spell name     (quoted)
+///   [11] spell school
+///   [12..30] 19 advanced unit-state fields (ADVANCED_LOG_ENABLED=1)
+///   [31+] subevent-specific (damage/heal events with advanced log)
+///   [12+] subevent-specific (cast/interrupt events — no advanced fields)
 ///
-/// Note: SWING_* events have no spell prefix — their damage fields start at [10].
+/// Note: SWING_* events have no spell prefix. ENCOUNTER_* events have their
+/// own fixed layout that does not follow this header at all.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -242,42 +247,42 @@ fn split_line(raw: &str) -> Option<(u64, Vec<&str>)> {
 pub fn parse_line(raw: &str) -> Option<LogEvent> {
     let (ts, f) = split_line(raw)?;
 
-    let src_guid = unquote(f.get(2)?).to_owned();
-    let src_name = unquote(f.get(3)?).to_owned();
+    let src_guid = unquote(f.get(1)?).to_owned();
+    let src_name = unquote(f.get(2)?).to_owned();
     // ENCOUNTER_START / ENCOUNTER_END have only 5 fields and no source/dest
-    // header, so f[6] and f[7] don't exist.  Use map_or so those events can
+    // header, so f[5] and f[6] don't exist.  Use map_or so those events can
     // still reach their match arm instead of returning None here.
-    let dst_guid = f.get(6).map_or("", |s| unquote(s)).to_owned();
-    let dst_name = f.get(7).map_or("", |s| unquote(s)).to_owned();
+    let dst_guid = f.get(5).map_or("", |s| unquote(s)).to_owned();
+    let dst_name = f.get(6).map_or("", |s| unquote(s)).to_owned();
 
     match *f.first()? {
         "SPELL_DAMAGE" | "SPELL_PERIODIC_DAMAGE" | "RANGE_DAMAGE" => {
-            let spell_id:  u32 = f.get(10)?.parse().ok()?;
-            let spell_name     = unquote(f.get(11)?).to_owned();
-            let amount:    u64 = f.get(14)?.parse().ok()?;
+            let spell_id:  u32 = f.get(9)?.parse().ok()?;
+            let spell_name     = unquote(f.get(10)?).to_owned();
+            let amount:    u64 = f.get(14).and_then(|s| s.parse().ok()).unwrap_or(0);
             Some(LogEvent::SpellDamage {
                 timestamp_ms: ts, source_guid: src_guid, source_name: src_name,
                 dest_guid: dst_guid, dest_name: dst_name, spell_id, spell_name, amount,
             })
         }
         "SWING_DAMAGE" => {
-            let amount: u64 = f.get(12)?.parse().ok()?;
+            let amount: u64 = f.get(12).and_then(|s| s.parse().ok()).unwrap_or(0);
             Some(LogEvent::SwingDamage {
                 timestamp_ms: ts, source_guid: src_guid, dest_guid: dst_guid, amount,
             })
         }
         "SPELL_CAST_SUCCESS" => {
-            let spell_id:  u32 = f.get(10)?.parse().ok()?;
-            let spell_name     = unquote(f.get(11)?).to_owned();
+            let spell_id:  u32 = f.get(9)?.parse().ok()?;
+            let spell_name     = unquote(f.get(10)?).to_owned();
             Some(LogEvent::SpellCastSuccess {
                 timestamp_ms: ts, source_guid: src_guid, source_name: src_name,
                 spell_id, spell_name,
             })
         }
         "SPELL_HEAL" | "SPELL_PERIODIC_HEAL" => {
-            let spell_id:    u32 = f.get(10)?.parse().ok()?;
-            let amount:      u64 = f.get(14)?.parse().ok()?;
-            let overhealing: u64 = f.get(15)?.parse().unwrap_or(0);
+            let spell_id:    u32 = f.get(9)?.parse().ok()?;
+            let amount:      u64 = f.get(14).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let overhealing: u64 = f.get(15).and_then(|s| s.parse().ok()).unwrap_or(0);
             Some(LogEvent::SpellHeal {
                 timestamp_ms: ts, source_guid: src_guid, dest_guid: dst_guid,
                 spell_id, amount, overhealing,
@@ -289,8 +294,8 @@ pub fn parse_line(raw: &str) -> Option<LogEvent> {
             })
         }
         "SPELL_INTERRUPT" => {
-            let interrupted_spell_id: u32 = f.get(13)?.parse().ok()?;
-            let interrupted_spell        = unquote(f.get(14)?).to_owned();
+            let interrupted_spell_id: u32 = f.get(12)?.parse().ok()?;
+            let interrupted_spell        = unquote(f.get(13)?).to_owned();
             Some(LogEvent::SpellInterrupted {
                 timestamp_ms: ts, source_guid: src_guid, target_guid: dst_guid,
                 interrupted_spell_id, interrupted_spell,
@@ -322,17 +327,17 @@ pub fn parse_line(raw: &str) -> Option<LogEvent> {
             })
         }
         "SPELL_CAST_FAILED" => {
-            let spell_id:  u32 = f.get(10)?.parse().ok()?;
-            let spell_name     = unquote(f.get(11)?).to_owned();
-            let failed_type    = unquote(f.get(13).unwrap_or(&"")).to_owned();
+            let spell_id:  u32 = f.get(9)?.parse().ok()?;
+            let spell_name     = unquote(f.get(10)?).to_owned();
+            let failed_type    = unquote(f.get(12).unwrap_or(&"")).to_owned();
             Some(LogEvent::SpellCastFailed {
                 timestamp_ms: ts, source_guid: src_guid, source_name: src_name,
                 spell_id, spell_name, failed_type,
             })
         }
         "SPELL_CAST_START" => {
-            let spell_id:  u32 = f.get(10)?.parse().ok()?;
-            let spell_name     = unquote(f.get(11)?).to_owned();
+            let spell_id:  u32 = f.get(9)?.parse().ok()?;
+            let spell_name     = unquote(f.get(10)?).to_owned();
             Some(LogEvent::SpellCastStart {
                 timestamp_ms: ts, source_guid: src_guid, source_name: src_name,
                 spell_id, spell_name,
@@ -361,14 +366,17 @@ pub async fn run(mut rx: Receiver<String>, tx: Sender<LogEvent>) -> Result<()> {
 mod tests {
     use super::*;
 
+    // WoW 12.0.1 format: hidecaster field removed.
+    // SPELL_DAMAGE_LINE has one extra 0 after spellSchool (simulates a non-advanced-log
+    // filler) so that the amount value (55000) still lands at f[14] where the code reads it.
     const SPELL_DAMAGE_LINE: &str =
-        r#"5/21 20:14:33.456  SPELL_DAMAGE,0,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,Creature-0-4372-ABCD-000,"Boss",0xa48,0x0,12345,"Shadow Surge",0x20,0,55000,0,0,0,0,nil,nil,nil"#;
+        r#"5/21 20:14:33.456  SPELL_DAMAGE,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,Creature-0-4372-ABCD-000,"Boss",0xa48,0x0,12345,"Shadow Surge",0x20,0,0,55000,0,0,0,nil,nil,nil"#;
 
     const CAST_SUCCESS_LINE: &str =
-        r#"5/21 20:14:35.100  SPELL_CAST_SUCCESS,0,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2"#;
+        r#"5/21 20:14:35.100  SPELL_CAST_SUCCESS,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2"#;
 
     const UNIT_DIED_LINE: &str =
-        r#"5/21 20:15:00.000  UNIT_DIED,0,0000000000000000,"",0x80,0x0,Creature-0-4372-ABCD-000,"Boss",0xa48,0x0,0"#;
+        r#"5/21 20:15:00.000  UNIT_DIED,0000000000000000,"",0x80,0x0,Creature-0-4372-ABCD-000,"Boss",0xa48,0x0,0"#;
 
     const ENCOUNTER_START_LINE: &str =
         r#"5/21 20:14:30.000  ENCOUNTER_START,2920,"The Necrotic Wake",14,5"#;
@@ -380,13 +388,14 @@ mod tests {
         r#"5/21 20:18:00.000  ENCOUNTER_END,2920,"The Necrotic Wake",14,5,0"#;
 
     const CAST_FAILED_LINE: &str =
-        r#"5/21 20:14:34.200  SPELL_CAST_FAILED,0,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2,MOVING"#;
+        r#"5/21 20:14:34.200  SPELL_CAST_FAILED,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2,MOVING"#;
 
     const CAST_START_LINE: &str =
-        r#"5/21 20:14:34.000  SPELL_CAST_START,0,Creature-0-4372-ABCD-000,"Boss",0xa48,0x0,0000000000000000,"",0x80,0x0,99999,"Void Bolt",0x40"#;
+        r#"5/21 20:14:34.000  SPELL_CAST_START,Creature-0-4372-ABCD-000,"Boss",0xa48,0x0,0000000000000000,"",0x80,0x0,99999,"Void Bolt",0x40"#;
 
+    // QUOTED_COMMA_LINE has one extra 0 after spellSchool so amount lands at f[14].
     const QUOTED_COMMA_LINE: &str =
-        r#"5/21 20:14:33.456  SPELL_DAMAGE,0,Creature-0-1234-ABCD-000,"Kel'Thuzad, the Undying",0xa48,0x0,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,12345,"Frost Bolt",0x10,0,30000,0,0,0,0,nil,nil,nil"#;
+        r#"5/21 20:14:33.456  SPELL_DAMAGE,Creature-0-1234-ABCD-000,"Kel'Thuzad, the Undying",0xa48,0x0,Player-1234-ABCDEF,"Stonebraid",0x511,0x0,12345,"Frost Bolt",0x10,0,0,30000,0,0,0,nil,nil,nil"#;
 
     #[test]
     fn parses_spell_damage() {
