@@ -151,6 +151,7 @@ impl EngineState {
 pub async fn run(
     mut event_rx:  Receiver<LogEvent>,
     mut id_rx:     Receiver<PlayerIdentity>,
+    mut config_rx: Receiver<AppConfig>,
     advice_tx:     Sender<AdviceEvent>,
     snap_tx:       Sender<StateSnapshot>,
     debrief_tx:    Sender<PullDebrief>,
@@ -215,8 +216,43 @@ pub async fn run(
                 }
             }
 
-            // Combat log events — the hot path
-            Some(event) = event_rx.recv() => {
+            // Config hot-update: save_config pushes a new AppConfig when the
+            // user changes player_focus or selected_spec.  Without this branch,
+            // focus_name is frozen at pipeline startup and GUID inference never
+            // fires if the user configures "Coached Character" after the pipeline
+            // is already running (the common first-run flow).
+            Some(new_cfg) = config_rx.recv() => {
+                let new_focus = new_cfg.player_focus
+                    .split('-')
+                    .next()
+                    .unwrap_or("")
+                    .to_owned();
+                if new_focus != eng.focus_name {
+                    tracing::info!(
+                        "Config update: player_focus '{}' → '{}' — resetting inferred GUID",
+                        eng.focus_name, new_focus
+                    );
+                    eng.combat.player_guid = None;
+                    eng.focus_name = new_focus;
+                }
+                if new_cfg.selected_spec != eng.config.selected_spec
+                    && !new_cfg.selected_spec.is_empty()
+                {
+                    if let Some(profile) = specs::load_by_key(&new_cfg.selected_spec) {
+                        tracing::info!(
+                            "Config update: spec profile → '{}'",
+                            new_cfg.selected_spec
+                        );
+                        eng.effective_major_cds = profile.major_cd_spell_ids;
+                        eng.effective_am_spells = profile.am_spell_ids;
+                    }
+                }
+                eng.config = new_cfg;
+            }
+
+            // Combat log events — the hot path (break on channel close)
+            result = event_rx.recv() => {
+            let Some(event) = result else { break };
                 let now_ms = event.timestamp_ms();
 
                 // GUID inference: if no identity yet but player_focus is configured,
@@ -363,7 +399,6 @@ pub async fn run(
                 let _ = snap_tx.try_send(snap); // Non-blocking — drop if UI is slow
             }
 
-            else => break,
         }
     }
     Ok(())

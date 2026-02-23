@@ -185,14 +185,14 @@ function SettingsApp() {
       <header style={{
         display: "flex", alignItems: "center", gap: 0,
         borderBottom: "1px solid var(--stroke)",
-        background: "rgba(11,15,24,0.97)",
+        background: "var(--bg-panel)",
         flexShrink: 0,
       }}>
         {/* Logo */}
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
+          <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px", color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.04em" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v1.0.9
+            Live Coach v1.1.0
           </div>
         </div>
 
@@ -526,10 +526,10 @@ function LiveFeedTab({ advice, snapshot, eventCount, connStatus }: LiveFeedTabPr
             </div>
           ) : advice.map((a) => (
             <div key={a.key} style={{
-              background: "rgba(255,255,255,0.03)",
+              background: "var(--bg-card)",
               border: `1px solid ${sevColor[a.severity] ?? "var(--stroke)"}44`,
               borderLeft: `3px solid ${sevColor[a.severity] ?? "var(--stroke)"}`,
-              borderRadius: 8, padding: "10px 14px",
+              borderRadius: "var(--radius-lg)", padding: "10px 14px",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                 <span style={{
@@ -646,8 +646,8 @@ function AudioTab({ config, save }: AudioTabProps) {
           const meta = SEVERITY_META[sev];
           return (
             <div key={sev} style={{
-              background: "rgba(255,255,255,0.03)", border: "1px solid var(--stroke)",
-              borderRadius: 10, padding: "14px 18px",
+              background: "var(--bg-card)", border: "1px solid var(--stroke)",
+              borderRadius: "var(--radius-lg)", padding: "14px 18px",
             }}>
               {/* Header row */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
@@ -780,8 +780,8 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
 
       {/* Toggle overlay hotkey */}
       <div style={{
-        background: "rgba(255,255,255,0.03)", border: "1px solid var(--stroke)",
-        borderRadius: 10, padding: "16px 20px", marginBottom: 16,
+        background: "var(--bg-card)", border: "1px solid var(--stroke)",
+        borderRadius: "var(--radius-lg)", padding: "16px 20px", marginBottom: 16,
       }}>
         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Toggle Overlay</div>
         <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>
@@ -790,9 +790,9 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
-            flex: 1, padding: "8px 12px", borderRadius: 8,
-            border: recording ? "1px solid var(--accent)" : "1px solid var(--stroke)",
-            background: recording ? "rgba(124,92,255,0.1)" : "rgba(11,15,24,0.65)",
+            flex: 1, padding: "8px 12px", borderRadius: "var(--radius)",
+            border: recording ? "1px solid var(--gold)" : "1px solid var(--stroke)",
+            background: recording ? "rgba(232,168,32,0.1)" : "var(--bg-input)",
             fontSize: 13, fontFamily: "var(--mono)",
             color: combo ? "var(--text)" : "var(--muted)",
             fontStyle: combo ? "normal" : "italic",
@@ -812,8 +812,8 @@ function HotkeysTab({ config, save, overlayOn, toggleOverlay }: HotkeysTabProps)
 
       {/* Quick-action */}
       <div style={{
-        background: "rgba(255,255,255,0.03)", border: "1px solid var(--stroke)",
-        borderRadius: 10, padding: "16px 20px",
+        background: "var(--bg-card)", border: "1px solid var(--stroke)",
+        borderRadius: "var(--radius-lg)", padding: "16px 20px",
       }}>
         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Quick Actions</div>
         <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>
@@ -891,8 +891,8 @@ function HistoryTab() {
         <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>Loading history…</div>
       ) : rows.length === 0 ? (
         <div style={{
-          background: "rgba(255,255,255,0.03)", border: "1px solid var(--stroke)",
-          borderRadius: 10, padding: "24px 20px", textAlign: "center",
+          background: "var(--bg-card)", border: "1px solid var(--stroke)",
+          borderRadius: "var(--radius-lg)", padding: "24px 20px", textAlign: "center",
         }}>
           <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>No pulls recorded yet.</div>
           <div style={{ fontSize: 11, color: "var(--muted)" }}>

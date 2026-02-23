@@ -119,6 +119,10 @@ pub fn run() {
             in_combat: false, interrupt_count: 0, encounter_name: None,
         }))
         .manage(Mutex::new(std::collections::VecDeque::<engine::AdviceEvent>::new()))
+        // Config hot-update sender — None until try_start_pipeline() creates the channel.
+        // save_config() uses this to push AppConfig changes to the running engine so
+        // player_focus / selected_spec changes take effect without restarting the pipeline.
+        .manage(Mutex::new(None::<mpsc::Sender<config::AppConfig>>))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -285,6 +289,14 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
     let wow_path_str = cfg.wow_log_path.to_string_lossy().to_string();
     let h = app.clone();
 
+    // Config hot-update channel — allows save_config to push AppConfig changes
+    // to the running engine after startup (e.g. player_focus, selected_spec).
+    // The sender is stored in managed state so save_config can find it later.
+    let (cfg_update_tx, cfg_update_rx) = mpsc::channel::<config::AppConfig>(4);
+    if let Ok(mut guard) = app.state::<Mutex<Option<mpsc::Sender<config::AppConfig>>>>().lock() {
+        *guard = Some(cfg_update_tx);
+    }
+
     // Tailer runs on a dedicated OS thread — NOT a tokio async task.
     // tailer::run uses blocking_send + recv_timeout (both blocking calls); spawning
     // it with tauri::async_runtime::spawn would put it in an async context where
@@ -302,7 +314,7 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
         .expect("failed to spawn combatlog-tailer thread");
     tauri::async_runtime::spawn(parser::run(b.raw_rx, b.event_tx));
     tauri::async_runtime::spawn(identity::run(cfg.addon_sv_path.clone(), b.id_tx, h.clone()));
-    tauri::async_runtime::spawn(engine::run(b.event_rx, b.id_rx, b.advice_tx, b.snap_tx, b.debrief_tx, cfg, b.db_writer));
+    tauri::async_runtime::spawn(engine::run(b.event_rx, b.id_rx, cfg_update_rx, b.advice_tx, b.snap_tx, b.debrief_tx, cfg, b.db_writer));
     tauri::async_runtime::spawn(ipc::run(b.advice_rx, b.snap_rx, b.debrief_rx, h));
 
     tracing::info!("Pipeline started successfully");
@@ -388,6 +400,16 @@ fn save_config(app: tauri::AppHandle, config: config::AppConfig) -> Result<(), S
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     config::save(&config, &dir).map_err(|e| e.to_string())?;
     try_start_pipeline(&app);
+    // Push the new config to the running engine for live GUID/spec updates.
+    // try_start_pipeline() is a no-op when the pipeline is already running, so
+    // changes to player_focus or selected_spec made after startup are delivered here.
+    if let Ok(guard) = app.state::<Mutex<Option<mpsc::Sender<config::AppConfig>>>>().lock() {
+        if let Some(tx) = guard.as_ref() {
+            if let Err(e) = tx.try_send(config) {
+                tracing::debug!("Config hot-update: channel full or closed: {}", e);
+            }
+        }
+    }
     Ok(())
 }
 

@@ -1,16 +1,52 @@
 /* Shared design tokens — imported by both overlay.css and settings.css */
 :root {
-  --bg:     #0b0f18;
-  --panel:  rgba(11, 15, 24, 0.92);
-  --stroke: rgba(34, 48, 79, 0.8);
-  --text:   #e8eefc;
-  --muted:  #a9b6d6;
-  --accent: #7c5cff;
-  --good:   #2bd576;
-  --warn:   #ffcc66;
-  --bad:    #ff5c77;
+  /* ── Companion App palette (dark navy / gold) ── */
+  --bg-app:     #0a0c10;
+  --bg-panel:   #0f1219;
+  --bg-card:    #141820;
+  --bg-hover:   #1a2030;
+  --bg-input:   #0d1018;
+
+  --border-subtle:  #1e2535;
+  --border-visible: #252d40;
+  --border-focus:   #e8a820;
+
+  --gold:       #e8a820;
+  --gold-dim:   #a87818;
+
+  --red:        #e84040;
+  --red-dim:    #7a1818;
+  --blue:       #40b8e8;
+  --blue-dim:   #185878;
+  --green:      #40e87a;
+  --green-dim:  #186830;
+
+  --text-primary:   #e0e8f0;
+  --text-secondary: #7888a0;
+  --text-muted:     #4a5870;
+
+  --radius:     4px;
+  --radius-lg:  8px;
+  --transition: 120ms ease;
+
+  /* ── Backward-compat aliases (used throughout existing inline styles) ── */
+  --bg:     var(--bg-app);
+  --panel:  var(--bg-panel);
+  --stroke: var(--border-visible);
+  --text:   var(--text-primary);
+  --muted:  var(--text-secondary);
+  --accent: var(--gold);
+  --good:   var(--green);
+  --warn:   var(--gold);
+  --bad:    var(--red);
   --mono:   ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --sans:   ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+
+/* Custom scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-panel); }
+::-webkit-scrollbar-thumb { background: var(--border-visible); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
