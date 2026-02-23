@@ -218,13 +218,9 @@ pub struct CombatState {
     pub interrupts:      InterruptTracker,
     /// Rolling per-pull damage taken (used by defensive_timing rule).
     pub damage_taken:    DamageTakenTracker,
-    /// GUIDs of entities that have attacked or been attacked by the player this pull.
-    /// Used to filter UNIT_DIED: only end a pull when an active combat participant
-    /// dies, not when unrelated creatures (warlock pets, wildlife, etc.) die.
-    pub active_combat_targets: HashSet<String>,
-    /// Log timestamp (ms) of the last player SPELL_CAST_SUCCESS.
-    /// Used for open-world combat timeout: end the pull if the player hasn't
-    /// cast in 10+ seconds and there's no ENCOUNTER_END to rely on.
+    /// Log timestamp (ms) of the last player cast, DoT tick, or auto-attack.
+    /// Used for the open-world combat timeout: end the pull if the player
+    /// has had no activity for 10+ seconds and there is no ENCOUNTER_END.
     pub last_player_cast_ms: Option<u64>,
 }
 
@@ -243,7 +239,6 @@ impl CombatState {
             encounter_name:  None,
             interrupts:      InterruptTracker::default(),
             damage_taken:    DamageTakenTracker::default(),
-            active_combat_targets: HashSet::new(),
             last_player_cast_ms:   None,
         }
     }
@@ -262,7 +257,6 @@ impl CombatState {
         self.interrupt_count = 0;
         self.damage_taken.reset();
         self.interrupts.reset_per_pull();
-        self.active_combat_targets.clear();
         self.last_player_cast_ms = None;
         self.in_combat = true;
         tracing::info!("Pull {} started at {}ms", n, timestamp_ms);

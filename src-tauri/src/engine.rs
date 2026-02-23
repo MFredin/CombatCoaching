@@ -484,12 +484,16 @@ fn is_coached_event(event: &LogEvent, player_guid: &Option<String>) -> bool {
 fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
     match event {
         LogEvent::SpellCastSuccess { source_guid, spell_id, .. } => {
-            // Combat start heuristic: first cast from any party member.
-            // EncounterStart is the preferred signal; this is the fallback.
-            if !state.in_combat {
+            let is_player = Some(source_guid.as_str()) == state.player_guid.as_deref();
+            // Only start a pull from the coached player's own cast.
+            // When player GUID is not yet known (player_focus not configured),
+            // fall back to any cast so combat is still detected.
+            // This prevents other players' casts in the same area from
+            // triggering spurious pulls for the coached character.
+            if !state.in_combat && (is_player || state.player_guid.is_none()) {
                 state.start_pull(now_ms);
             }
-            if Some(source_guid.as_str()) == state.player_guid.as_deref() {
+            if is_player {
                 state.gcd.record_cast(now_ms);
                 state.cooldowns.record_cast(*spell_id, now_ms);
                 state.last_player_cast_ms = Some(now_ms);
@@ -500,12 +504,12 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
             if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
                 state.avoidable.record_hit(*spell_id, now_ms);
                 state.damage_taken.record(now_ms, *amount);
-                // Enemy that hit the player is an active combat participant
-                state.active_combat_targets.insert(source_guid.clone());
             }
             if Some(source_guid.as_str()) == state.player_guid.as_deref() {
-                // Target the player hit is an active combat participant
-                state.active_combat_targets.insert(dest_guid.clone());
+                // DoT ticks and channeled damage keep the combat alive.
+                // This prevents premature timeout when the player is casting
+                // nothing but damage-over-time spells are still ticking.
+                state.last_player_cast_ms = Some(now_ms);
             }
             state.event_window.push(event.clone(), now_ms);
         }
@@ -513,37 +517,29 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
         LogEvent::SwingDamage { source_guid, dest_guid, amount, .. } => {
             if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
                 state.damage_taken.record(now_ms, *amount);
-                state.active_combat_targets.insert(source_guid.clone());
             }
             if Some(source_guid.as_str()) == state.player_guid.as_deref() {
-                state.active_combat_targets.insert(dest_guid.clone());
+                // Auto-attacks keep the combat alive between casts.
+                state.last_player_cast_ms = Some(now_ms);
             }
             state.event_window.push(event.clone(), now_ms);
         }
 
-        LogEvent::UnitDied { dest_name, dest_guid, .. } => {
-            // Fall back to UNIT_DIED as pull-end signal only when not in an
-            // encounter (ENCOUNTER_END is authoritative and handled below).
+        LogEvent::UnitDied { dest_guid, .. } => {
+            // In non-encounter combat, only the player's own death ends a pull.
+            // ENCOUNTER_END is authoritative for kill/wipe in dungeons/raids.
+            //
+            // Enemy and pet deaths are intentionally ignored here:
+            //   — Other players' nearby targets dying from their AoE or yours
+            //   — Warlock/DK pets being killed, dismissed, or resummoned
+            //   — Wildlife and unrelated creatures in the area
+            //
+            // The 10-second no-activity timeout (last_player_cast_ms) handles
+            // open-world pull-end without any of these false positives.
             if state.in_combat && state.encounter_name.is_none() {
-                // Player death → always end as wipe.
                 if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
                     state.end_pull(now_ms, PullOutcome::Wipe);
                     tracing::debug!("Pull ended by player death");
-                }
-                // Creature death → only end the pull if this entity actually
-                // participated in combat (attacked or was attacked by the player).
-                // This prevents warlock pets, ghouls, or unrelated wildlife from
-                // prematurely ending pulls every time they die.
-                else if dest_guid.starts_with("Creature")
-                    && state.active_combat_targets.contains(dest_guid.as_str())
-                {
-                    state.end_pull(now_ms, PullOutcome::Kill);
-                    tracing::debug!("Pull ended by UNIT_DIED '{}'", dest_name);
-                } else {
-                    tracing::debug!(
-                        "UNIT_DIED '{}' ({}) ignored — not an active combat participant",
-                        dest_name, dest_guid
-                    );
                 }
             }
         }
