@@ -131,7 +131,11 @@ impl TailerState {
 /// `logs_dir`    — the WoW Logs directory (e.g. `..\World of Warcraft\_retail_\Logs`).
 /// `app_handle`  — used to emit `coach:connection` status events to the frontend.
 /// `wow_path_str`— human-readable path shown in the settings Connection panel.
-pub async fn run(
+/// NOTE: this is a plain (non-async) blocking function — it must be spawned on a
+/// dedicated OS thread (std::thread::spawn), NOT via tauri::async_runtime::spawn.
+/// Using blocking_send from within a tokio async context panics when the channel
+/// fills up; running on a plain thread avoids that entirely.
+pub fn run(
     logs_dir:     PathBuf,
     tx:           Sender<String>,
     app_handle:   AppHandle,
@@ -144,8 +148,23 @@ pub async fn run(
     let config = notify::Config::default()
         .with_poll_interval(Duration::from_millis(500));
 
-    let mut watcher = RecommendedWatcher::new(fs_tx, config)?;
-    watcher.watch(&logs_dir, RecursiveMode::NonRecursive)?;
+    let mut watcher = match RecommendedWatcher::new(fs_tx, config) {
+        Ok(w) => w,
+        Err(e) => {
+            tracing::error!("Tailer: failed to create filesystem watcher: {}", e);
+            ipc::emit_connection(&app_handle, &ConnectionStatus {
+                log_tailing: false, addon_connected: false, wow_path: wow_path_str,
+            });
+            return Err(e.into());
+        }
+    };
+    if let Err(e) = watcher.watch(&logs_dir, RecursiveMode::NonRecursive) {
+        tracing::error!("Tailer: cannot watch {:?}: {}", logs_dir, e);
+        ipc::emit_connection(&app_handle, &ConnectionStatus {
+            log_tailing: false, addon_connected: false, wow_path: wow_path_str,
+        });
+        return Err(e.into());
+    }
 
     let mut state = TailerState::new(logs_dir);
 

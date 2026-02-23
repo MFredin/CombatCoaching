@@ -264,7 +264,21 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
     let wow_path_str = cfg.wow_log_path.to_string_lossy().to_string();
     let h = app.clone();
 
-    tauri::async_runtime::spawn(tailer::run(cfg.wow_log_path.clone(), b.raw_tx, h.clone(), wow_path_str));
+    // Tailer runs on a dedicated OS thread — NOT a tokio async task.
+    // tailer::run uses blocking_send + recv_timeout (both blocking calls); spawning
+    // it with tauri::async_runtime::spawn would put it in an async context where
+    // blocking_send panics when the channel fills up (common with large existing logs).
+    let tailer_path = cfg.wow_log_path.clone();
+    let tailer_tx   = b.raw_tx;
+    let tailer_h    = h.clone();
+    std::thread::Builder::new()
+        .name("combatlog-tailer".into())
+        .spawn(move || {
+            if let Err(e) = tailer::run(tailer_path, tailer_tx, tailer_h, wow_path_str) {
+                tracing::error!("Tailer exited with error: {}", e);
+            }
+        })
+        .expect("failed to spawn combatlog-tailer thread");
     tauri::async_runtime::spawn(parser::run(b.raw_rx, b.event_tx));
     tauri::async_runtime::spawn(identity::run(cfg.addon_sv_path.clone(), b.id_tx, h.clone()));
     tauri::async_runtime::spawn(engine::run(b.event_rx, b.id_rx, b.advice_tx, b.snap_tx, b.debrief_tx, cfg, b.db_writer));
