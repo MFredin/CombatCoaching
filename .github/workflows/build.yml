@@ -113,7 +113,24 @@ jobs:
           Get-Content latest.json
 
       # -----------------------------------------------------------------------
-      # 9. Create GitHub Release and upload installer + latest.json
+      # 9. Package addon as a zip for easy installation
+      #    Creates CombatCoach-addon.zip with the correct folder structure:
+      #    CombatCoach/CombatCoach.toc  +  CombatCoach/CombatCoach.lua
+      #    Users extract this directly into Interface/AddOns/
+      # -----------------------------------------------------------------------
+      - name: Package addon zip
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "addon-pkg\CombatCoach" -Force | Out-Null
+          Copy-Item "addon\CombatCoach.toc" "addon-pkg\CombatCoach\"
+          Copy-Item "addon\CombatCoach.lua" "addon-pkg\CombatCoach\"
+          Compress-Archive -Path "addon-pkg\CombatCoach" -DestinationPath "CombatCoach-addon.zip" -Force
+          Write-Host "Addon zip created:"
+          Get-ChildItem CombatCoach-addon.zip
+
+      # -----------------------------------------------------------------------
+      # 10. Create GitHub Release and upload installer + addon + latest.json
       # -----------------------------------------------------------------------
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -129,12 +146,21 @@ jobs:
             1. Download and run the `.exe` installer below
             2. Launch **CombatLedger Live Coach** from the Start Menu
             3. On first run, click **Auto-detect** to find your WoW installation
-            4. Copy the `addon/CombatCoach` folder into your WoW `Interface/AddOns/` directory
-            5. Log into WoW and type `/cc` to confirm the addon is working
+            4. **Install the addon** (strongly recommended for real-time coaching):
+               - Download `CombatCoach-addon.zip` from the assets below
+               - Extract it into `World of Warcraft\_retail_\Interface\AddOns\`
+               - You should now have `Interface\AddOns\CombatCoach\CombatCoach.toc`
+               - Log into WoW and type `/cc` to confirm the addon is working
+               - Make sure combat logging is enabled (`/combatlog`)
+
+            ### What the addon does
+            The CombatCoach addon flushes WoW's combat log buffer to disk every second
+            during combat. Without it, WoW batches log writes and the app may not receive
+            events until combat ends. With it, coaching advice appears **in real time**.
 
             ### What's in this release
-            - Real-time combat log tailing (< 50ms latency)
-            - Three coaching rules: avoidable damage, GCD gaps, cooldown drift
+            - Real-time combat log tailing (< 50ms latency with addon)
+            - Coaching rules: avoidable damage, GCD gaps, cooldown drift
             - Transparent always-on-top overlay (WoW must use Windowed Fullscreen)
             - Drag-and-drop overlay panel layout editor with opacity and scale controls
             - In-app update checker (Settings sidebar → Updates)
@@ -146,12 +172,13 @@ jobs:
             - WebView2 runtime (included with Windows 11 and Microsoft Edge)
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
+            CombatCoach-addon.zip
             latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # -----------------------------------------------------------------------
-      # 10. Upload installer as workflow artifact (available on every run)
+      # 11. Upload installer as workflow artifact (available on every run)
       # -----------------------------------------------------------------------
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
