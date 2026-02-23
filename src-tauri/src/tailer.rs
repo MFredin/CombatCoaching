@@ -48,17 +48,7 @@ impl TailerState {
         } else {
             tracing::info!("Tailer: no WoWCombatLog*.txt found yet in {:?}", logs_dir);
         }
-        // Seek to EOF so we only process lines written after the app starts.
-        // Without this, a large existing log (100K–1M lines from a previous session)
-        // floods the pipeline on startup: blocking_send parks the tailer OS thread
-        // indefinitely, the heartbeat never fires, and WebView2 is overwhelmed with
-        // stale advice events from last night's raid.
-        let position = active_file
-            .as_deref()
-            .and_then(|p| std::fs::metadata(p).ok())
-            .map(|m| m.len())
-            .unwrap_or(0);
-        Self { logs_dir, active_file, position }
+        Self { logs_dir, active_file, position: 0 }
     }
 
     /// Called on directory Create events.  If a newer WoWCombatLog*.txt has
@@ -178,6 +168,18 @@ pub fn run(
 
     let mut state = TailerState::new(logs_dir);
 
+    // Skip pre-existing content — only process lines written after the app starts.
+    // Placed here (not in TailerState::new) so unit tests can call new() directly
+    // and read pre-existing content as expected.
+    // Without this, a large log (100K–1M lines from a previous session) floods the
+    // pipeline: blocking_send parks the tailer thread indefinitely, the heartbeat
+    // never fires, and WebView2 is overwhelmed with stale advice events.
+    state.position = state.active_file
+        .as_deref()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .map(|m| m.len())
+        .unwrap_or(0);
+
     // Emit initial connection status so the settings UI reflects reality immediately.
     let tailing_now = state.active_file.is_some();
     ipc::emit_connection(&app_handle, &ConnectionStatus {
@@ -186,7 +188,8 @@ pub fn run(
         wow_path:        wow_path_str.clone(),
     });
 
-    // Initial read — pick up any lines already in the current log file
+    // Initial read — handles any lines written between position-setting and watcher
+    // start (a very small window, but worth covering for correctness).
     state.read_new_lines(&tx)?;
 
     loop {
