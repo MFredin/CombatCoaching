@@ -75,7 +75,7 @@ jobs:
       #    The updater endpoint just checks the version number via latest.json.
       # -----------------------------------------------------------------------
       - name: Build Tauri app
-        run: npx tauri build --locked
+        run: npx tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
