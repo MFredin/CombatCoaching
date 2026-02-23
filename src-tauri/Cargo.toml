@@ -1,6 +1,6 @@
 [package]
 name    = "combat-ledger-live-coach"
-version = "1.0.5"
+version = "1.0.6"
 edition = "2021"
 
 [lib]
@@ -12,7 +12,7 @@ name = "combat-ledger-live-coach"
 path = "src/main.rs"
 
 [dependencies]
-tauri                        = { version = "2", features = [] }
+tauri                        = { version = "=2.10.2", features = [] }
 tauri-plugin-dialog          = "2"
 tauri-plugin-shell           = "2"
 tauri-plugin-global-shortcut = "2"
@@ -34,7 +34,7 @@ tracing-appender     = "0.2"
 tempfile = "3"
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "=2.5.5",  features = [] }
 
 [profile.release]
 panic         = "unwind"   # was "abort" — unwind lets us catch panics and log them

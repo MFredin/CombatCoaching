@@ -51,19 +51,25 @@ jobs:
           workspaces: "src-tauri -> target"
 
       # -----------------------------------------------------------------------
-      # 5. Install npm dependencies
+      # 5. Generate Cargo.lock (ensures reproducible resolution with pinned versions)
+      # -----------------------------------------------------------------------
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+
+      # -----------------------------------------------------------------------
+      # 6. Install npm dependencies
       # -----------------------------------------------------------------------
       - name: Install npm dependencies
         run: npm install
 
       # -----------------------------------------------------------------------
-      # 6. Build frontend (Vite)
+      # 7. Build frontend (Vite)
       # -----------------------------------------------------------------------
       - name: Build frontend
         run: npm run build
 
       # -----------------------------------------------------------------------
-      # 7. Build Tauri app (Rust compile + NSIS bundle)
+      # 8. Build Tauri app (Rust compile + NSIS bundle)
       #    TAURI_SIGNING_PRIVATE_KEY is intentionally empty — we're not using
       #    Tauri's update signing for now (pubkey left blank in tauri.conf.json).
       #    The updater endpoint just checks the version number via latest.json.
@@ -178,6 +184,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "src-tauri -> target"
+
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
 
       # npm install is needed because tauri-build (build.rs) requires the
       # frontend dist to exist for the Tauri context macro to compile.
