@@ -99,6 +99,26 @@ pub fn run() {
     tracing::info!("CombatLedger Live Coach starting — logs → {}", log_dir.display());
 
     tauri::Builder::default()
+        // Register the three "UI poll state" types here — before setup(), before any
+        // plugin loads, and before any command handler can ever be dispatched.
+        //
+        // Why: the settings window is visible:true, so WebView2 begins loading JS
+        // immediately at process start.  On warm-cache launches (2nd+ run), React mounts
+        // in ~400 ms and the setInterval pollers call invoke("get_connection_status") etc.
+        // before setup() has reached the app.manage() calls at lines 179-192 (~300-500 ms
+        // into setup).  When state() is called before manage(), Tauri panics inside the
+        // FFI-based command dispatch (which cannot unwind) → process::abort() → 0xc0000409.
+        //
+        // Builder::manage() guarantees state is registered before the event loop starts,
+        // so there is no window where a command handler can race against setup().
+        .manage(Mutex::new(ipc::ConnectionStatus {
+            log_tailing: false, addon_connected: false, wow_path: String::new()
+        }))
+        .manage(Mutex::new(ipc::StateSnapshot {
+            pull_elapsed_ms: 0, gcd_gap_ms: 0, avoidable_count: 0,
+            in_combat: false, interrupt_count: 0, encounter_name: None,
+        }))
+        .manage(Mutex::new(std::collections::VecDeque::<engine::AdviceEvent>::new()))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -173,23 +193,10 @@ pub fn run() {
             };
             app.manage(Mutex::new(Some(bundle)));
             app.manage(AtomicBool::new(false)); // pipeline-running gate
-            // Latest connection status — kept in sync by ipc::emit_connection()
-            // so the frontend can poll get_connection_status on mount and always
-            // get the correct value even if it missed the live event.
-            app.manage(Mutex::new(ipc::ConnectionStatus {
-                log_tailing: false, addon_connected: false, wow_path: String::new()
-            }));
-            // Latest state snapshot — overwritten by ipc::run on every log event.
-            // Polled by the frontend every 300 ms via get_state_snapshot.
-            // (Replaces the push-based coach:state event which requires capabilities.)
-            app.manage(Mutex::new(ipc::StateSnapshot {
-                pull_elapsed_ms: 0, gcd_gap_ms: 0, avoidable_count: 0,
-                in_combat: false, interrupt_count: 0, encounter_name: None,
-            }));
-            // Advice ring buffer — filled by ipc::run (cap 50).
-            // Drained and returned by the frontend every 500 ms via drain_advice_queue.
-            // (Replaces the push-based coach:advice event which requires capabilities.)
-            app.manage(Mutex::new(std::collections::VecDeque::<engine::AdviceEvent>::new()));
+            // NOTE: ConnectionStatus, StateSnapshot, and VecDeque<AdviceEvent> are
+            // registered via Builder::manage() above (before setup runs) to prevent a
+            // race where the frontend's immediate invoke() calls fire before manage()
+            // is reached here.  Do NOT move them back into setup().
 
             let handle = app.handle().clone();
 
