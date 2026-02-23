@@ -192,7 +192,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px", color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.04em" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v1.2.0
+            Live Coach v1.2.1
           </div>
         </div>
 
@@ -455,7 +455,32 @@ function LiveFeedTab({ advice, snapshot, eventCount, connStatus, playerFocus }: 
     if (feedRef.current) feedRef.current.scrollTop = 0;
   }, [advice.length]);
 
-  const elapsed    = snapshot.pull_elapsed_ms;
+  // Smooth pull timer: extrapolates pull_elapsed_ms between log-event batches.
+  // WoW writes the combat log in chunks (every ~0.5–2 s); without this, the
+  // timer only jumps on each batch and appears frozen between flushes.
+  const snapRef     = useRef(snapshot);
+  const snapTimeRef = useRef(Date.now());
+  const [liveElapsed, setLiveElapsed] = useState(0);
+
+  useEffect(() => {
+    snapRef.current     = snapshot;
+    snapTimeRef.current = Date.now();
+  }, [snapshot]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const s = snapRef.current;
+      if (s.in_combat && s.pull_elapsed_ms > 0) {
+        // Extrapolate: add wall-clock time elapsed since the last snapshot
+        setLiveElapsed(s.pull_elapsed_ms + (Date.now() - snapTimeRef.current));
+      } else {
+        setLiveElapsed(s.pull_elapsed_ms);
+      }
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsed    = liveElapsed;
   const mins       = Math.floor(elapsed / 60000);
   const secs       = Math.floor((elapsed % 60000) / 1000);
   const elapsedStr = elapsed > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : "—";

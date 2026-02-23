@@ -314,6 +314,24 @@ pub async fn run(
                 // Update the combat state machine for every event
                 update_state(&mut eng.combat, &event, now_ms);
 
+                // ── Open-world combat timeout ──────────────────────────────────
+                // If the player hasn't cast in 10 seconds during non-encounter
+                // combat, assume they've left combat (walked away from target
+                // dummies, stopped fighting, etc.).  ENCOUNTER_END is authoritative
+                // for dungeon/raid pulls; this timeout handles everything else.
+                const COMBAT_TIMEOUT_MS: u64 = 10_000;
+                if eng.combat.in_combat && eng.combat.encounter_name.is_none() {
+                    if let Some(last_cast) = eng.combat.last_player_cast_ms {
+                        if now_ms.saturating_sub(last_cast) > COMBAT_TIMEOUT_MS {
+                            tracing::info!(
+                                "Combat timeout: no player cast for {}ms — ending pull",
+                                now_ms.saturating_sub(last_cast)
+                            );
+                            eng.combat.end_pull(now_ms, PullOutcome::Wipe);
+                        }
+                    }
+                }
+
                 // ── Pull start ─────────────────────────────────────────────────
                 if !was_in_combat && eng.combat.in_combat {
                     eng.pull_number       += 1;
@@ -474,20 +492,31 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
             if Some(source_guid.as_str()) == state.player_guid.as_deref() {
                 state.gcd.record_cast(now_ms);
                 state.cooldowns.record_cast(*spell_id, now_ms);
+                state.last_player_cast_ms = Some(now_ms);
             }
         }
 
-        LogEvent::SpellDamage { dest_guid, spell_id, amount, .. } => {
+        LogEvent::SpellDamage { source_guid, dest_guid, spell_id, amount, .. } => {
             if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
                 state.avoidable.record_hit(*spell_id, now_ms);
                 state.damage_taken.record(now_ms, *amount);
+                // Enemy that hit the player is an active combat participant
+                state.active_combat_targets.insert(source_guid.clone());
+            }
+            if Some(source_guid.as_str()) == state.player_guid.as_deref() {
+                // Target the player hit is an active combat participant
+                state.active_combat_targets.insert(dest_guid.clone());
             }
             state.event_window.push(event.clone(), now_ms);
         }
 
-        LogEvent::SwingDamage { dest_guid, amount, .. } => {
+        LogEvent::SwingDamage { source_guid, dest_guid, amount, .. } => {
             if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
                 state.damage_taken.record(now_ms, *amount);
+                state.active_combat_targets.insert(source_guid.clone());
+            }
+            if Some(source_guid.as_str()) == state.player_guid.as_deref() {
+                state.active_combat_targets.insert(dest_guid.clone());
             }
             state.event_window.push(event.clone(), now_ms);
         }
@@ -496,13 +525,26 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
             // Fall back to UNIT_DIED as pull-end signal only when not in an
             // encounter (ENCOUNTER_END is authoritative and handled below).
             if state.in_combat && state.encounter_name.is_none() {
-                let outcome = if dest_guid.starts_with("Creature") {
-                    PullOutcome::Kill
+                // Player death → always end as wipe.
+                if Some(dest_guid.as_str()) == state.player_guid.as_deref() {
+                    state.end_pull(now_ms, PullOutcome::Wipe);
+                    tracing::debug!("Pull ended by player death");
+                }
+                // Creature death → only end the pull if this entity actually
+                // participated in combat (attacked or was attacked by the player).
+                // This prevents warlock pets, ghouls, or unrelated wildlife from
+                // prematurely ending pulls every time they die.
+                else if dest_guid.starts_with("Creature")
+                    && state.active_combat_targets.contains(dest_guid.as_str())
+                {
+                    state.end_pull(now_ms, PullOutcome::Kill);
+                    tracing::debug!("Pull ended by UNIT_DIED '{}'", dest_name);
                 } else {
-                    PullOutcome::Wipe
-                };
-                state.end_pull(now_ms, outcome);
-                tracing::debug!("Pull ended by UNIT_DIED '{}'", dest_name);
+                    tracing::debug!(
+                        "UNIT_DIED '{}' ({}) ignored — not an active combat participant",
+                        dest_name, dest_guid
+                    );
+                }
             }
         }
 
