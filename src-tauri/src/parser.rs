@@ -1,17 +1,21 @@
 /// Parses raw WoW combat log lines into typed `LogEvent` structs.
 ///
-/// WoW combat log format (12.0.1+, hidecaster field removed):
+/// WoW combat log format (12.0.1+, no hidecaster field):
 ///
-///   TIMESTAMP  SUBEVENT,SOURCEGUID,SOURCENAME,SOURCEFLAGS,SOURCERAIDFLAGS,
-///              DESTGUID,DESTNAME,DESTFLAGS,DESTROAIDFLAGS,
-///              [SPELLID,SPELLNAME,SPELLSCHOOL,]    ← SPELL_* events only
-///              [19 advanced unit-state fields,]     ← ADVANCED_LOG_ENABLED=1
-///              [subevent-specific fields...]
+///   Timestamp format: "M/D/YYYY HH:MM:SS.mmmm" (4-digit year, 4-digit sub-seconds)
+///   Older WoW:        "M/D HH:MM:SS.mmm"        (no year, 3-digit sub-seconds)
+///   Separator:        two spaces between timestamp and payload
 ///
-/// Field indices (0-based, WoW 12.0.1 — hidecaster removed):
+///   Payload: SUBEVENT,SOURCEGUID,SOURCENAME,SOURCEFLAGS,SOURCERAIDFLAGS,
+///                     DESTGUID,DESTNAME,DESTFLAGS,DESTROAIDFLAGS,
+///                     [SPELLID,SPELLNAME,SPELLSCHOOL,]    ← SPELL_* events only
+///                     [19 advanced unit-state fields,]     ← ADVANCED_LOG_ENABLED=1
+///                     [subevent-specific fields...]
+///
+/// Field indices (0-based, WoW 12.0.1+):
 ///   [0]  subevent name (e.g. "SPELL_DAMAGE")
 ///   [1]  source GUID
-///   [2]  source name (quoted)
+///   [2]  source name (quoted, may include realm: "Stonebraid-Draenor-EU")
 ///   [3]  source flags
 ///   [4]  source raid flags
 ///   [5]  dest GUID
@@ -21,9 +25,7 @@
 ///   [9]  spell ID       (prefix fields, SPELL_* events only)
 ///   [10] spell name     (quoted)
 ///   [11] spell school
-///   [12..30] 19 advanced unit-state fields (ADVANCED_LOG_ENABLED=1)
-///   [31+] subevent-specific (damage/heal events with advanced log)
-///   [12+] subevent-specific (cast/interrupt events — no advanced fields)
+///   [12+] advanced unit-state fields (ADVANCED_LOG_ENABLED=1) then subevent-specific
 ///
 /// Note: SWING_* events have no spell prefix. ENCOUNTER_* events have their
 /// own fixed layout that does not follow this header at all.
@@ -207,20 +209,42 @@ fn csv_fields(s: &str, max: usize) -> Vec<&str> {
 // Parsing helpers
 // ---------------------------------------------------------------------------
 
-/// Parse the WoW log timestamp prefix "M/D HH:MM:SS.mmm" into milliseconds.
+/// Parse the WoW log timestamp into milliseconds-since-midnight.
+///
+/// Accepted formats:
+///   "M/D HH:MM:SS.mmm"      — WoW ≤11.x  (3-digit sub-seconds)
+///   "M/D/YYYY HH:MM:SS.mmmm" — WoW 12.0.1+ (4-digit sub-seconds)
+///
+/// The date portion is discarded (only time-of-day matters for relative diffs).
+/// Sub-second precision is normalised to 3-digit milliseconds regardless of
+/// how many fractional digits the log provides (1–4+).
 fn parse_timestamp(date_time: &str) -> Option<u64> {
-    let mut parts = date_time.splitn(2, ' ');
-    let _date = parts.next()?; // e.g. "5/21" — unused (Phase 0)
-    let time  = parts.next()?; // e.g. "20:14:33.123"
+    // The last space separates date from time.
+    // "2/23/2026 16:22:39.2461" → date="2/23/2026", time="16:22:39.2461"
+    // "5/21 20:14:33.456"       → date="5/21",       time="20:14:33.456"
+    let space_pos = date_time.rfind(' ')?;
+    let time = &date_time[space_pos + 1..];
 
     let mut time_parts = time.splitn(3, ':');
     let h:  u64 = time_parts.next()?.parse().ok()?;
     let m:  u64 = time_parts.next()?.parse().ok()?;
     let sm: &str = time_parts.next()?;
 
-    let (s_str, ms_str) = sm.split_once('.').unwrap_or((sm, "0"));
-    let s:  u64 = s_str.parse().ok()?;
-    let ms: u64 = ms_str.parse().ok()?;
+    let (s_str, frac_str) = sm.split_once('.').unwrap_or((sm, "0"));
+    let s: u64 = s_str.parse().ok()?;
+
+    // Normalise fractional seconds to milliseconds.
+    // WoW 12.0.1 uses 4 digits (ten-thousandths); older versions use 3 (ms).
+    // We handle any digit count by treating the string as a decimal fraction.
+    let frac_raw: u64 = frac_str.parse().ok()?;
+    let ms: u64 = match frac_str.len() {
+        0 => 0,
+        1 => frac_raw * 100,   // 0.X     → X00 ms
+        2 => frac_raw * 10,    // 0.XX    → XX0 ms
+        3 => frac_raw,         // 0.XXX   → XXX ms (WoW ≤11.x)
+        4 => frac_raw / 10,    // 0.XXXX  → XXX ms (WoW 12.0.1+)
+        _ => frac_raw / 10_u64.pow((frac_str.len() as u32).saturating_sub(3)),
+    };
 
     Some((h * 3_600 + m * 60 + s) * 1_000 + ms)
 }
@@ -511,5 +535,51 @@ mod tests {
     fn returns_none_for_garbage() {
         assert!(parse_line("not a log line").is_none());
         assert!(parse_line("").is_none());
+    }
+
+    // ── Timestamp format tests ────────────────────────────────────────────
+
+    #[test]
+    fn parses_3_digit_subseconds() {
+        // WoW ≤11.x format: "M/D HH:MM:SS.mmm"
+        let line = r#"5/21 20:14:33.456  SPELL_CAST_SUCCESS,Player-1234-ABCDEF,"Test",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2"#;
+        let e = parse_line(line).expect("should parse 3-digit ts");
+        let expected_ms = (20 * 3600 + 14 * 60 + 33) * 1000 + 456;
+        assert_eq!(e.timestamp_ms(), expected_ms);
+    }
+
+    #[test]
+    fn parses_4_digit_subseconds() {
+        // WoW 12.0.1+ format: "M/D/YYYY HH:MM:SS.mmmm"
+        let line = r#"2/23/2026 16:22:39.2461  SPELL_CAST_SUCCESS,Player-1234-ABCDEF,"Test",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2"#;
+        let e = parse_line(line).expect("should parse 4-digit ts");
+        // 2461 ten-thousandths → 246 ms
+        let expected_ms = (16 * 3600 + 22 * 60 + 39) * 1000 + 246;
+        assert_eq!(e.timestamp_ms(), expected_ms);
+    }
+
+    #[test]
+    fn timestamps_monotonic_across_seconds() {
+        // Verify that 42.8831 < 43.2791 after normalisation (was broken with raw 4-digit)
+        let line_a = r#"2/23/2026 16:22:42.8831  SPELL_CAST_SUCCESS,Player-1234-ABCDEF,"Test",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2"#;
+        let line_b = r#"2/23/2026 16:22:43.2791  SPELL_CAST_SUCCESS,Player-1234-ABCDEF,"Test",0x511,0x0,0000000000000000,"",0x80,0x0,31884,"Avenging Wrath",0x2"#;
+        let ts_a = parse_line(line_a).unwrap().timestamp_ms();
+        let ts_b = parse_line(line_b).unwrap().timestamp_ms();
+        assert!(ts_b > ts_a, "43.2791 should be after 42.8831 but got ts_a={} ts_b={}", ts_a, ts_b);
+    }
+
+    #[test]
+    fn parses_wow12_realm_name_format() {
+        // WoW 12.0.1+: player names include realm and region
+        let line = r#"2/23/2026 16:22:42.8831  SPELL_CAST_SUCCESS,Player-1403-0B16F518,"Stonebraid-Draenor-EU",0x511,0x80000000,Creature-0-3770-2552,"Kelpfist",0x10a28,0x80000000,20271,"Judgment",0x2"#;
+        let e = parse_line(line).expect("should parse realm name");
+        match e {
+            LogEvent::SpellCastSuccess { source_name, source_guid, spell_name, .. } => {
+                assert_eq!(source_name, "Stonebraid-Draenor-EU");
+                assert_eq!(source_guid, "Player-1403-0B16F518");
+                assert_eq!(spell_name, "Judgment");
+            }
+            other => panic!("Wrong variant: {:?}", other),
+        }
     }
 }

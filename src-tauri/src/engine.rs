@@ -278,14 +278,15 @@ pub async fn run(
                 let now_ms = event.timestamp_ms();
 
                 // Passively cache Player-* name→GUID while player is unidentified.
-                // This allows a config hot-update (user sets player_focus after combat
-                // begins) to resolve the GUID immediately from the cache rather than
-                // having to wait for the player's next SpellCastSuccess.
+                // Key = character name (before first '-'), lowercased.
+                // WoW 12.0.1+ source_name is "Name-Realm-Region" (e.g. "Stonebraid-Draenor-EU");
+                // older WoW uses just "Name" (e.g. "Stonebraid").
                 if eng.combat.player_guid.is_none() {
                     if let LogEvent::SpellCastSuccess { source_guid, source_name, .. } = &event {
                         if source_guid.starts_with("Player-") {
+                            let cache_key = extract_char_name(source_name).to_ascii_lowercase();
                             eng.player_name_cache
-                                .entry(source_name.to_ascii_lowercase())
+                                .entry(cache_key)
                                 .or_insert_with(|| source_guid.clone());
                         }
                     }
@@ -293,12 +294,14 @@ pub async fn run(
 
                 // GUID inference: if no identity yet but player_focus is configured,
                 // try to infer GUID from the first matching SPELL_CAST_SUCCESS.
+                // Compares character name only (before first '-') to handle both
+                // old format ("Stonebraid") and WoW 12.0.1+ ("Stonebraid-Draenor-EU").
                 if eng.combat.player_guid.is_none() && !eng.focus_name.is_empty() {
                     if let LogEvent::SpellCastSuccess { source_guid, source_name, .. } = &event {
-                        if source_name.eq_ignore_ascii_case(&eng.focus_name) {
+                        if extract_char_name(source_name).eq_ignore_ascii_case(&eng.focus_name) {
                             tracing::info!(
-                                "GUID inferred from player_focus '{}': {}",
-                                eng.focus_name, source_guid
+                                "GUID inferred from player_focus '{}': {} (source_name='{}')",
+                                eng.focus_name, source_guid, source_name
                             );
                             eng.combat.player_guid = Some(source_guid.clone());
                         }
@@ -542,6 +545,17 @@ fn update_state(state: &mut CombatState, event: &LogEvent, now_ms: u64) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Extract the character name (before the first '-') from a WoW source_name.
+///
+/// WoW 12.0.1+ combat log format: `"Stonebraid-Draenor-EU"` → `"Stonebraid"`
+/// Older WoW format:               `"Stonebraid"`            → `"Stonebraid"`
+///
+/// Used for GUID inference and passive name caching so name matching works
+/// regardless of whether the combat log includes realm/region suffixes.
+fn extract_char_name(full_name: &str) -> &str {
+    full_name.split('-').next().unwrap_or(full_name)
+}
 
 fn unix_now_ms() -> u64 {
     std::time::SystemTime::now()
