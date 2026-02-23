@@ -192,7 +192,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px", color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.04em" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v1.2.4
+            Live Coach v1.2.5
           </div>
         </div>
 
@@ -507,7 +507,7 @@ function LiveFeedTab({ advice, snapshot, eventCount, connStatus, playerFocus }: 
         <StatBlock label="Addon"
           value={connStatus.addon_connected ? "Connected" : "Disconnected"}
           color={connStatus.addon_connected ? "var(--good)" : "var(--muted)"} />
-        <StatBlock label="Events received"
+        <StatBlock label="Advice fired"
           value={eventCount.toLocaleString()} />
 
         {/* Warning: log active but no coached character set */}

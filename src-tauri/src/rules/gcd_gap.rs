@@ -10,6 +10,10 @@ use crate::{engine::Severity, parser::LogEvent};
 
 pub const KEY: &str = "gcd_gap";
 const THRESHOLD_MS: u64 = 2_500;
+/// Gaps longer than this are not reported — they indicate death + ress,
+/// a long boss mechanic (phase transition, forced downtime), or a missing
+/// data window from WoW's log buffer.  These are not actionable coaching moments.
+const MAX_GAP_MS:   u64 = 30_000;
 const MIN_INTENSITY: u8  = 3;
 
 pub fn evaluate(input: &RuleInput, ctx: &RuleContext) -> RuleOutput {
@@ -27,7 +31,7 @@ pub fn evaluate(input: &RuleInput, ctx: &RuleContext) -> RuleOutput {
     }
 
     let gap_ms = ctx.state.gcd.current_gap_ms;
-    if gap_ms < THRESHOLD_MS {
+    if gap_ms < THRESHOLD_MS || gap_ms > MAX_GAP_MS {
         return vec![];
     }
 
