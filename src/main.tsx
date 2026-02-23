@@ -192,7 +192,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v1.0.0
+            Live Coach v1.0.1
           </div>
         </div>
 
@@ -1013,6 +1013,10 @@ window.addEventListener("error", (e) => {
 
 window.addEventListener("unhandledrejection", (e) => {
   console.error("[unhandledrejection]", e.reason);
+  // Send to Rust log so failures are visible in coach.log without DevTools
+  void invoke("log_frontend_error", {
+    msg: `unhandledrejection: ${String(e.reason)}`,
+  }).catch(() => {});
   const root = document.getElementById("root");
   if (root && root.childNodes.length === 0) {
     root.innerHTML = `<div style="padding:32px;color:#ff5c77;font-family:monospace;background:#0b0f18;min-height:100vh">

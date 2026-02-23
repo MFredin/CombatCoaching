@@ -203,6 +203,7 @@ pub fn run() {
             config::get_config,
             save_config,
             get_connection_status,
+            log_frontend_error,
             config::detect_wow_path,
             config::list_wtf_characters,
             config::list_specs,
@@ -621,6 +622,20 @@ async fn get_pull_history(app: tauri::AppHandle) -> Result<Vec<PullHistoryRow>, 
     })
     .await
     .map_err(|e| format!("Task error: {}", e))?
+}
+
+// ---------------------------------------------------------------------------
+// Frontend diagnostics — lets JS log errors to coach.log without DevTools
+// ---------------------------------------------------------------------------
+
+/// Log an error or diagnostic message from the JavaScript frontend into the
+/// Rust coach.log file.  Used to diagnose JS-side failures (e.g. listen()
+/// timing out, unhandled rejections) without needing browser DevTools access
+/// in a shipped Tauri app.  Hooked up in useTauriEvents.ts (safeListenWithTimeout)
+/// and in main.tsx (window.unhandledrejection listener).
+#[tauri::command]
+fn log_frontend_error(msg: String) {
+    tracing::error!("[frontend] {}", msg);
 }
 
 // ---------------------------------------------------------------------------
