@@ -1,0 +1,9 @@
+{
+  "identifier": "default",
+  "description": "Core IPC and dialog access for settings and overlay windows.\n\ncore:default grants plugin:event|listen, plugin:event|unlisten, plugin:event|emit,\nand all other Tauri core plugin commands.  Without it, listen() from\n@tauri-apps/api/event is denied by the ACL with \"Command plugin:event|listen\nnot allowed by ACL\" (confirmed in v1.0.2 coach.log).\n\ndialog:default grants the file open/save dialogs used by the log folder picker.\n\nNOTE: global-shortcut:default is intentionally omitted.  The plugin is\ninitialised via Builder::new().with_handler() rather than init(), which does not\nregister the global-shortcut:default permission bundle; including it caused a\nprocess::abort() (0xc0000409) at startup in v1.0.1.  The overlay toggle hotkey\nis fully handled in Rust — no frontend invokes the global-shortcut plugin.\n\nNOTE: No $schema field — gen/schemas/desktop-schema.json is generated only by a\nlocal `tauri build` and is never committed to this repository.",
+  "windows": ["settings", "overlay"],
+  "permissions": [
+    "core:default",
+    "dialog:default"
+  ]
+}

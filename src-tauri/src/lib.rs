@@ -305,7 +305,7 @@ fn get_connection_status(app: tauri::AppHandle) -> ipc::ConnectionStatus {
         .unwrap_or_else(|_| ipc::ConnectionStatus {
             log_tailing: false, addon_connected: false, wow_path: String::new()
         });
-    tracing::info!(
+    tracing::debug!(
         "get_connection_status: returning log_tailing={} path={:?}",
         s.log_tailing, s.wow_path
     );
