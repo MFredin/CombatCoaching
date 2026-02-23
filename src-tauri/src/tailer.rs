@@ -193,10 +193,19 @@ pub fn run(
     state.read_new_lines(&tx)?;
 
     loop {
-        // recv_timeout allows a periodic heartbeat so the frontend always receives
-        // the current connection status even if it missed the initial one-shot emit
-        // (race between tailer startup and the webview registering its listen() handler).
-        match fs_rx.recv_timeout(Duration::from_secs(1)) {
+        // recv_timeout of 250 ms serves two purposes:
+        //   1. Heartbeat — re-emit connection status so the frontend recovers from
+        //      the race where it registered its listener after the one-shot startup
+        //      emission had already fired.
+        //   2. Polling fallback — WoW buffers its combat-log writes in the C-runtime
+        //      stdio buffer (typically 64-128 KB).  On low-intensity content (target
+        //      dummies, solo questing) the buffer may not fill during an entire pull,
+        //      so WoW never calls WriteFile → ReadDirectoryChangesW never fires →
+        //      EventKind::Modify is never delivered.  WoW flushes the buffer when it
+        //      reaches capacity OR at explicit flush points (combat-end, zone change,
+        //      /reload).  By also reading in the timeout handler we detect any flush
+        //      within 250 ms instead of waiting for the next Modify event.
+        match fs_rx.recv_timeout(Duration::from_millis(250)) {
             Ok(Ok(Event { kind, paths, .. })) => {
                 match kind {
                     // A new file was created — check if it's a newer combat log
@@ -237,10 +246,14 @@ pub fn run(
                 }
             }
             Ok(Err(e)) => tracing::error!("Watcher error: {}", e),
-            // Heartbeat: no filesystem event for 5 s — re-emit connection status.
-            // This recovers from the race where the frontend registered its listener
-            // after the one-shot startup emission had already fired.
+            // Heartbeat / polling fallback: 250 ms passed with no filesystem event.
+            // Re-emit connection status AND attempt a read — this catches any data
+            // WoW flushed whose WriteFile call notify may have coalesced or missed.
+            // read_new_lines() is a cheap no-op if the file length hasn't changed.
             Err(std_mpsc::RecvTimeoutError::Timeout) => {
+                if let Err(e) = state.read_new_lines(&tx) {
+                    tracing::warn!("Tailer poll-read error: {}", e);
+                }
                 ipc::emit_connection(&app_handle, &ConnectionStatus {
                     log_tailing:     state.active_file.is_some(),
                     addon_connected: false,
