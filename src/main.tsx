@@ -192,7 +192,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px", color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.04em" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v1.1.0
+            Live Coach v1.1.1
           </div>
         </div>
 
@@ -246,6 +246,7 @@ function SettingsApp() {
           <LiveFeedTab
             advice={advice} snapshot={snapshot}
             eventCount={eventCount} connStatus={connStatus}
+            playerFocus={config.player_focus ?? ""}
           />
         )}
         {tab === "audio"    && <AudioTab   config={config} save={save} />}
@@ -440,13 +441,14 @@ function HomeTab({
 // LIVE FEED TAB
 // ===========================================================================
 interface LiveFeedTabProps {
-  advice:     AdviceEvent[];
-  snapshot:   StateSnapshot;
-  eventCount: number;
-  connStatus: ConnStatus;
+  advice:       AdviceEvent[];
+  snapshot:     StateSnapshot;
+  eventCount:   number;
+  connStatus:   ConnStatus;
+  playerFocus:  string;
 }
 
-function LiveFeedTab({ advice, snapshot, eventCount, connStatus }: LiveFeedTabProps) {
+function LiveFeedTab({ advice, snapshot, eventCount, connStatus, playerFocus }: LiveFeedTabProps) {
   const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -482,6 +484,23 @@ function LiveFeedTab({ advice, snapshot, eventCount, connStatus }: LiveFeedTabPr
           color={connStatus.addon_connected ? "var(--good)" : "var(--muted)"} />
         <StatBlock label="Events received"
           value={eventCount.toLocaleString()} />
+
+        {/* Warning: log active but no coached character set */}
+        {connStatus.log_tailing && !playerFocus && (
+          <div style={{
+            background: "rgba(232,168,32,0.08)",
+            border: "1px solid var(--gold-dim)",
+            borderRadius: "var(--radius)",
+            padding: "8px 10px",
+            fontSize: 11,
+            color: "var(--gold)",
+            marginTop: 4,
+            marginBottom: 4,
+            lineHeight: 1.5,
+          }}>
+            ⚠ No character selected. Go to the <strong>Home</strong> tab and choose your character under <em>Coached Character</em>.
+          </div>
+        )}
 
         <SectionHeader style={{ marginTop: 16 }}>Combat State</SectionHeader>
         <StatBlock label="Status"

@@ -258,7 +258,7 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
         Ok(d) => d,
         Err(e) => { tracing::error!("try_start_pipeline: cannot resolve config dir: {}", e); return; }
     };
-    let cfg = match config::load_or_default(&config_dir) {
+    let mut cfg = match config::load_or_default(&config_dir) {
         Ok(c) => c,
         Err(e) => { tracing::error!("try_start_pipeline: config load failed: {}", e); return; }
     };
@@ -273,6 +273,26 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
     if ready.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
         tracing::info!("try_start_pipeline: pipeline already running — skipping");
         return;
+    }
+
+    // Auto-populate player_focus from WTF directory if not yet configured and
+    // exactly one character exists. This eliminates the manual "Coached Character"
+    // selection step for the common case of a single-character account.
+    // Only runs once (the CAS above ensures this), so the filesystem scan is cheap.
+    if cfg.player_focus.is_empty() {
+        let wtf_chars = config::scan_wtf_characters(&cfg.wow_log_path);
+        if wtf_chars.len() == 1 {
+            let auto_focus = format!("{}-{}", wtf_chars[0].name, wtf_chars[0].realm);
+            tracing::info!("Auto-setting player_focus from WTF (single character): '{}'", auto_focus);
+            cfg.player_focus = auto_focus;
+            // Persist so the UI dropdown reflects the selection on next load.
+            let _ = config::save(&cfg, &config_dir);
+        } else {
+            tracing::info!(
+                "player_focus empty; {} WTF characters found — manual selection required",
+                wtf_chars.len()
+            );
+        }
     }
 
     // Take the bundle (single-use — None after this point).

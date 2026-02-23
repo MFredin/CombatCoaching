@@ -87,6 +87,10 @@ struct EngineState {
     effective_am_spells: Vec<u32>,
     /// Character name extracted from `config.player_focus` for GUID inference.
     focus_name:          String,
+    /// Passive name→GUID cache for all Player-* sources seen while player is unidentified.
+    /// Populated from SpellCastSuccess events; checked on config hot-update so the GUID
+    /// can be resolved immediately when player_focus is set after combat has already begun.
+    player_name_cache:   HashMap<String, String>,
     /// Total advice events fired this pull (for debrief).
     pull_advice_count:   u32,
     /// GCD gap advice events fired this pull (for debrief).
@@ -127,6 +131,7 @@ impl EngineState {
             effective_major_cds,
             effective_am_spells,
             focus_name,
+            player_name_cache:   HashMap::new(),
             pull_advice_count:   0,
             pull_gcd_gap_count:  0,
             config,
@@ -229,11 +234,28 @@ pub async fn run(
                     .to_owned();
                 if new_focus != eng.focus_name {
                     tracing::info!(
-                        "Config update: player_focus '{}' → '{}' — resetting inferred GUID",
+                        "Config update: player_focus '{}' → '{}'",
                         eng.focus_name, new_focus
                     );
-                    eng.combat.player_guid = None;
-                    eng.focus_name = new_focus;
+                    eng.focus_name = new_focus.clone();
+                    // Check the passive name→GUID cache first — the player may have
+                    // cast many spells while player_focus was empty (common first-run
+                    // flow: pipeline starts → user enters combat → sets character).
+                    // Resolving from cache means advice starts flowing immediately.
+                    if let Some(cached_guid) = eng.player_name_cache.get(&new_focus.to_ascii_lowercase()) {
+                        tracing::info!(
+                            "Config update: GUID for '{}' resolved from cache: {}",
+                            new_focus, cached_guid
+                        );
+                        eng.combat.player_guid = Some(cached_guid.clone());
+                    } else {
+                        // No cache hit — reset GUID and wait for next SpellCastSuccess
+                        eng.combat.player_guid = None;
+                        tracing::info!(
+                            "Config update: '{}' not in cache yet — waiting for next cast",
+                            new_focus
+                        );
+                    }
                 }
                 if new_cfg.selected_spec != eng.config.selected_spec
                     && !new_cfg.selected_spec.is_empty()
@@ -254,6 +276,20 @@ pub async fn run(
             result = event_rx.recv() => {
             let Some(event) = result else { break };
                 let now_ms = event.timestamp_ms();
+
+                // Passively cache Player-* name→GUID while player is unidentified.
+                // This allows a config hot-update (user sets player_focus after combat
+                // begins) to resolve the GUID immediately from the cache rather than
+                // having to wait for the player's next SpellCastSuccess.
+                if eng.combat.player_guid.is_none() {
+                    if let LogEvent::SpellCastSuccess { source_guid, source_name, .. } = &event {
+                        if source_guid.starts_with("Player-") {
+                            eng.player_name_cache
+                                .entry(source_name.to_ascii_lowercase())
+                                .or_insert_with(|| source_guid.clone());
+                        }
+                    }
+                }
 
                 // GUID inference: if no identity yet but player_focus is configured,
                 // try to infer GUID from the first matching SPELL_CAST_SUCCESS.
