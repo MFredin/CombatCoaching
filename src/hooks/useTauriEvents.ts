@@ -1,26 +1,21 @@
-// Subscribes to Tauri backend events and manages listener cleanup.
+// Polls Tauri backend commands for all event data.
 //
-// Handlers are stored in a ref so the effect doesn't re-subscribe on every
-// render when the parent component re-renders — subscriptions are set up
-// exactly once and torn down on unmount.
+// All listen()-based event delivery has been replaced with invoke() polling
+// because capabilities files cause a startup crash (0xc0000409) in this
+// codebase due to a tauri-build (2.5.5) / tauri runtime (2.10.2) version
+// mismatch.  Without a capabilities file, plugin:event|listen is denied by
+// the ACL.  invoke() for user-defined #[tauri::command] functions always works
+// without any capabilities file — confirmed working since v0.9.7.
 //
-// Resilience notes (v1.0.1):
+// Poll intervals:
+//   get_connection_status  — every 1000 ms  (connection health pill)
+//   get_state_snapshot     — every  300 ms  (pull clock, stat widgets, timeline)
+//   drain_advice_queue     — every  500 ms  (advice cards in Live Feed + overlay)
 //
-// In Tauri v2, `listen()` internally calls `invoke("plugin:event|listen")`,
-// which is a plugin-namespaced IPC call.  Without a capabilities/default.json
-// that grants `core:default`, this call may silently never resolve in
-// production builds, hanging the entire setup() async function and preventing
-// `invoke("get_connection_status")` from ever being called.
-//
-// Two safety measures are added here:
-//   1. safeListenWithTimeout — races each listen() against a 3-second timeout.
-//      On hang or throw, logs the error to coach.log via log_frontend_error and
-//      returns a no-op unlisten so setup() always completes.
-//   2. setInterval connection-status polling — calls invoke("get_connection_status")
-//      every 1 s regardless of whether listen() resolved.  The invoke() pathway
-//      is independently confirmed to work, so the LOG pill always stays correct.
+// Handlers are stored in a ref so the effect closure never goes stale when
+// the parent component re-renders.  Intervals are created once on mount and
+// cleared on unmount.
 import { useEffect, useRef } from "react";
-import { listen, type UnlistenFn, type EventCallback } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type AdviceEvent,
@@ -28,45 +23,7 @@ import {
   type ConnectionStatus,
   type PlayerIdentity,
   type PullDebrief,
-  EVENT_ADVICE,
-  EVENT_STATE,
-  EVENT_CONNECTION,
-  EVENT_IDENTITY,
-  EVENT_DEBRIEF,
 } from "../types/events";
-
-// ---------------------------------------------------------------------------
-// safeListenWithTimeout
-//
-// Wraps listen() with:
-//   • A .catch() so a thrown error doesn't propagate up through setup()
-//   • A Promise.race() timeout so a hanging listen() doesn't block setup()
-//
-// On error or timeout: logs to console + coach.log (via log_frontend_error),
-// then resolves with a no-op unlisten so the rest of setup() continues.
-// ---------------------------------------------------------------------------
-async function safeListenWithTimeout<T>(
-  event: string,
-  handler: EventCallback<T>,
-  timeoutMs = 3000
-): Promise<UnlistenFn> {
-  return Promise.race([
-    listen<T>(event, handler).catch((err: unknown) => {
-      const msg = `listen(${event}) threw: ${String(err)}`;
-      console.error("[useTauriEvents]", msg);
-      void invoke("log_frontend_error", { msg }).catch(() => {});
-      return (): void => {};
-    }),
-    new Promise<UnlistenFn>((resolve) =>
-      setTimeout(() => {
-        const msg = `listen(${event}) timed out after ${timeoutMs}ms`;
-        console.warn("[useTauriEvents]", msg);
-        void invoke("log_frontend_error", { msg }).catch(() => {});
-        resolve((): void => {});
-      }, timeoutMs)
-    ),
-  ]);
-}
 
 export interface TauriEventHandlers {
   onAdvice?:        (event: AdviceEvent)       => void;
@@ -82,74 +39,13 @@ export function useTauriEvents(handlers: TauriEventHandlers): void {
   ref.current = handlers;
 
   useEffect(() => {
-    const unlisten: UnlistenFn[] = [];
-    let connIntervalId: ReturnType<typeof setInterval> | null = null;
+    const intervals: ReturnType<typeof setInterval>[] = [];
 
-    const setup = async () => {
-      if (ref.current.onAdvice) {
-        unlisten.push(
-          await safeListenWithTimeout<AdviceEvent>(EVENT_ADVICE, (e) =>
-            ref.current.onAdvice?.(e.payload)
-          )
-        );
-      }
-      if (ref.current.onStateSnapshot) {
-        unlisten.push(
-          await safeListenWithTimeout<StateSnapshot>(EVENT_STATE, (e) =>
-            ref.current.onStateSnapshot?.(e.payload)
-          )
-        );
-      }
-      if (ref.current.onConnection) {
-        unlisten.push(
-          await safeListenWithTimeout<ConnectionStatus>(EVENT_CONNECTION, (e) =>
-            ref.current.onConnection?.(e.payload)
-          )
-        );
-      }
-      if (ref.current.onIdentity) {
-        unlisten.push(
-          await safeListenWithTimeout<PlayerIdentity>(EVENT_IDENTITY, (e) =>
-            ref.current.onIdentity?.(e.payload)
-          )
-        );
-      }
-      if (ref.current.onDebrief) {
-        unlisten.push(
-          await safeListenWithTimeout<PullDebrief>(EVENT_DEBRIEF, (e) =>
-            ref.current.onDebrief?.(e.payload)
-          )
-        );
-      }
-
-      // All listen() round-trips complete (or timed out) — sync connection
-      // status from managed state so the LOG pill is correct even if the
-      // one-shot startup emission fired before listeners were registered.
-      if (ref.current.onConnection) {
-        try {
-          const status = await invoke<ConnectionStatus>("get_connection_status");
-          ref.current.onConnection(status);
-        } catch {
-          // Backend not ready yet — the interval below will pick it up shortly
-        }
-      }
-    };
-
-    setup();
-
-    // ---------------------------------------------------------------------------
-    // Connection-status polling (belt-and-suspenders)
-    //
-    // Polls invoke("get_connection_status") every 1 s regardless of whether
-    // listen() resolved.  invoke() is confirmed working even when plugin IPC is
-    // broken, so this guarantees the LOG pill stays accurate at all times.
-    //
-    // Uses handlers.onConnection (initial value, not ref.current) to decide
-    // whether to set up the interval, and ref.current inside the callback so
-    // the most recent handler is always invoked.
-    // ---------------------------------------------------------------------------
+    // ── Connection status ────────────────────────────────────────────────────
+    // Polled every 1 s regardless of any event system status.
+    // invoke("get_connection_status") is confirmed working without capabilities.
     if (handlers.onConnection) {
-      const pollConn = async () => {
+      const poll = async () => {
         try {
           const status = await invoke<ConnectionStatus>("get_connection_status");
           ref.current.onConnection?.(status);
@@ -157,13 +53,50 @@ export function useTauriEvents(handlers: TauriEventHandlers): void {
           // Backend not ready or shutting down — ignore
         }
       };
-      pollConn(); // immediate sync on mount
-      connIntervalId = setInterval(pollConn, 1000);
+      poll(); // immediate sync on mount
+      intervals.push(setInterval(poll, 1000));
     }
 
+    // ── State snapshot ───────────────────────────────────────────────────────
+    // Polled every 300 ms — drives PullClock, StatWidgets, Timeline.
+    // Replaces the push-based coach:state event (requires capabilities).
+    if (handlers.onStateSnapshot) {
+      const poll = async () => {
+        try {
+          const snap = await invoke<StateSnapshot>("get_state_snapshot");
+          ref.current.onStateSnapshot?.(snap);
+        } catch {
+          // Backend not ready or shutting down — ignore
+        }
+      };
+      poll(); // immediate sync on mount
+      intervals.push(setInterval(poll, 300));
+    }
+
+    // ── Advice queue drain ───────────────────────────────────────────────────
+    // Polled every 500 ms — atomically drains all pending advice events from
+    // the 50-item ring buffer maintained by ipc::run.
+    // Replaces the push-based coach:advice event (requires capabilities).
+    if (handlers.onAdvice) {
+      const poll = async () => {
+        try {
+          const events = await invoke<AdviceEvent[]>("drain_advice_queue");
+          events.forEach(e => ref.current.onAdvice?.(e));
+        } catch {
+          // Backend not ready or shutting down — ignore
+        }
+      };
+      poll(); // immediate sync on mount
+      intervals.push(setInterval(poll, 500));
+    }
+
+    // Identity and debrief events are not yet polled (deferred to v1.0.5).
+    // The engine infers player GUID from player_focus + SPELL_CAST_SUCCESS
+    // without a frontend identity event — advice fires as long as player_focus
+    // is configured in Settings → "Coached Character".
+
     return () => {
-      if (connIntervalId !== null) clearInterval(connIntervalId);
-      unlisten.forEach((fn) => fn());
+      intervals.forEach(clearInterval);
     };
-  }, []); // Empty deps: subscribe once
+  }, []); // Empty deps: set up once on mount, tear down on unmount
 }

@@ -179,6 +179,17 @@ pub fn run() {
             app.manage(Mutex::new(ipc::ConnectionStatus {
                 log_tailing: false, addon_connected: false, wow_path: String::new()
             }));
+            // Latest state snapshot — overwritten by ipc::run on every log event.
+            // Polled by the frontend every 300 ms via get_state_snapshot.
+            // (Replaces the push-based coach:state event which requires capabilities.)
+            app.manage(Mutex::new(ipc::StateSnapshot {
+                pull_elapsed_ms: 0, gcd_gap_ms: 0, avoidable_count: 0,
+                in_combat: false, interrupt_count: 0, encounter_name: None,
+            }));
+            // Advice ring buffer — filled by ipc::run (cap 50).
+            // Drained and returned by the frontend every 500 ms via drain_advice_queue.
+            // (Replaces the push-based coach:advice event which requires capabilities.)
+            app.manage(Mutex::new(std::collections::VecDeque::<engine::AdviceEvent>::new()));
 
             let handle = app.handle().clone();
 
@@ -203,6 +214,8 @@ pub fn run() {
             config::get_config,
             save_config,
             get_connection_status,
+            get_state_snapshot,
+            drain_advice_queue,
             log_frontend_error,
             config::detect_wow_path,
             config::list_wtf_characters,
@@ -310,6 +323,48 @@ fn get_connection_status(app: tauri::AppHandle) -> ipc::ConnectionStatus {
         s.log_tailing, s.wow_path
     );
     s
+}
+
+// ---------------------------------------------------------------------------
+// get_state_snapshot + drain_advice_queue — polled by the frontend instead
+// of using listen() / coach:state + coach:advice push events.
+//
+// Rationale: capabilities files cause a startup crash (0xc0000409) in this
+// codebase due to a tauri-build (2.5.5) / tauri runtime (2.10.2) version
+// mismatch — the binary format generated at build time is incompatible with
+// the ACL parser at runtime.  Without a capabilities file, plugin:event|listen
+// is denied by the ACL, so all push-based emit/listen is broken.
+// invoke() for user-defined #[tauri::command] functions always works without
+// any capabilities file, so we use polling exclusively for all event delivery.
+// ---------------------------------------------------------------------------
+
+/// Return the latest combat state snapshot stored in managed state.
+/// `ipc::run` overwrites this on every log event.
+/// Polled by the frontend every 300 ms via invoke("get_state_snapshot").
+#[tauri::command]
+fn get_state_snapshot(app: tauri::AppHandle) -> ipc::StateSnapshot {
+    app.state::<Mutex<ipc::StateSnapshot>>()
+        .lock()
+        .map(|s| s.clone())
+        .unwrap_or_else(|_| ipc::StateSnapshot {
+            pull_elapsed_ms: 0,
+            gcd_gap_ms:      0,
+            avoidable_count: 0,
+            in_combat:       false,
+            interrupt_count: 0,
+            encounter_name:  None,
+        })
+}
+
+/// Drain and return all pending advice events from the managed ring buffer.
+/// `ipc::run` pushes advice events here (cap 50); this call atomically takes them all.
+/// Polled by the frontend every 500 ms via invoke("drain_advice_queue").
+#[tauri::command]
+fn drain_advice_queue(app: tauri::AppHandle) -> Vec<engine::AdviceEvent> {
+    app.state::<Mutex<std::collections::VecDeque<engine::AdviceEvent>>>()
+        .lock()
+        .map(|mut q| q.drain(..).collect())
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------

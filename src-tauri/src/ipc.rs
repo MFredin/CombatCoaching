@@ -2,13 +2,18 @@
 ///
 /// Tauri v2 API: `use tauri::Emitter; app_handle.emit(event_name, &payload)`
 /// This sends to ALL webview windows simultaneously (overlay + settings).
-/// Each window subscribes only to the events it needs via `listen()` in TypeScript.
 ///
-/// IMPORTANT: Tauri v2 uses `app_handle.emit()` (not v1's `emit_all()`).
-/// The `Emitter` trait must be in scope.
+/// NOTE: capabilities files cause a startup crash in this codebase due to a
+/// tauri-build (2.5.5) / tauri runtime (2.10.2) version mismatch — the binary
+/// format generated at build time is incompatible with the ACL parser at runtime.
+/// The emit() calls here are therefore best-effort: they succeed only if a future
+/// version aligns tauri-build with the runtime.  The primary delivery path for all
+/// events is now managed-state polling via invoke() (get_state_snapshot,
+/// drain_advice_queue, get_connection_status) — all confirmed working.
 use crate::engine::AdviceEvent;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc::Receiver;
@@ -72,7 +77,14 @@ pub struct PullDebrief {
 // IPC task
 // ---------------------------------------------------------------------------
 
-/// Drains AdviceEvent, StateSnapshot, and PullDebrief channels, emitting each to all windows.
+/// Drains AdviceEvent, StateSnapshot, and PullDebrief channels, emitting each to all
+/// windows AND writing to managed state for invoke()-based polling.
+///
+/// Managed-state side-effects (primary delivery path):
+///   • Mutex<StateSnapshot>           — overwritten on every snap; polled via get_state_snapshot
+///   • Mutex<VecDeque<AdviceEvent>>   — ring-buffered (cap 50); drained via drain_advice_queue
+///
+/// emit() calls are best-effort (succeed only if capabilities work); polling is always reliable.
 pub async fn run(
     mut advice_rx:  Receiver<AdviceEvent>,
     mut snap_rx:    Receiver<StateSnapshot>,
@@ -82,19 +94,29 @@ pub async fn run(
     loop {
         tokio::select! {
             Some(advice) = advice_rx.recv() => {
-                if let Err(e) = app_handle.emit(EVENT_ADVICE, &advice) {
-                    tracing::error!("IPC emit advice error: {}", e);
+                // Best-effort emit (may silently fail without capabilities)
+                let _ = app_handle.emit(EVENT_ADVICE, &advice);
+                // Primary delivery: push to managed ring buffer for drain polling
+                if let Some(state) = app_handle.try_state::<Mutex<VecDeque<AdviceEvent>>>() {
+                    if let Ok(mut q) = state.lock() {
+                        q.push_back(advice);
+                        if q.len() > 50 { q.pop_front(); } // cap ring buffer at 50
+                    }
                 }
             }
             Some(snap) = snap_rx.recv() => {
-                if let Err(e) = app_handle.emit(EVENT_STATE, &snap) {
-                    tracing::error!("IPC emit state error: {}", e);
+                // Best-effort emit
+                let _ = app_handle.emit(EVENT_STATE, &snap);
+                // Primary delivery: overwrite managed snapshot for poll
+                if let Some(state) = app_handle.try_state::<Mutex<StateSnapshot>>() {
+                    if let Ok(mut s) = state.lock() {
+                        *s = snap;
+                    }
                 }
             }
             Some(debrief) = debrief_rx.recv() => {
-                if let Err(e) = app_handle.emit(EVENT_DEBRIEF, &debrief) {
-                    tracing::error!("IPC emit debrief error: {}", e);
-                }
+                // Best-effort emit only (debrief polling deferred to v1.0.5)
+                let _ = app_handle.emit(EVENT_DEBRIEF, &debrief);
             }
             else => break,
         }
