@@ -48,7 +48,17 @@ impl TailerState {
         } else {
             tracing::info!("Tailer: no WoWCombatLog*.txt found yet in {:?}", logs_dir);
         }
-        Self { logs_dir, active_file, position: 0 }
+        // Seek to EOF so we only process lines written after the app starts.
+        // Without this, a large existing log (100K–1M lines from a previous session)
+        // floods the pipeline on startup: blocking_send parks the tailer OS thread
+        // indefinitely, the heartbeat never fires, and WebView2 is overwhelmed with
+        // stale advice events from last night's raid.
+        let position = active_file
+            .as_deref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map(|m| m.len())
+            .unwrap_or(0);
+        Self { logs_dir, active_file, position }
     }
 
     /// Called on directory Create events.  If a newer WoWCombatLog*.txt has
@@ -183,7 +193,7 @@ pub fn run(
         // recv_timeout allows a periodic heartbeat so the frontend always receives
         // the current connection status even if it missed the initial one-shot emit
         // (race between tailer startup and the webview registering its listen() handler).
-        match fs_rx.recv_timeout(Duration::from_secs(5)) {
+        match fs_rx.recv_timeout(Duration::from_secs(1)) {
             Ok(Ok(Event { kind, paths, .. })) => {
                 match kind {
                     // A new file was created — check if it's a newer combat log

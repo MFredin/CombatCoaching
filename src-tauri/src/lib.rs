@@ -298,12 +298,17 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
 /// identity module emits a status change.
 #[tauri::command]
 fn get_connection_status(app: tauri::AppHandle) -> ipc::ConnectionStatus {
-    app.state::<Mutex<ipc::ConnectionStatus>>()
+    let s = app.state::<Mutex<ipc::ConnectionStatus>>()
         .lock()
         .map(|s| s.clone())
         .unwrap_or_else(|_| ipc::ConnectionStatus {
             log_tailing: false, addon_connected: false, wow_path: String::new()
-        })
+        });
+    tracing::info!(
+        "get_connection_status: returning log_tailing={} path={:?}",
+        s.log_tailing, s.wow_path
+    );
+    s
 }
 
 // ---------------------------------------------------------------------------

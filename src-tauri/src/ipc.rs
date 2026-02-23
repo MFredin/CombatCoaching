@@ -109,6 +109,10 @@ pub async fn run(
 /// `get_connection_status` (called by the frontend on mount) always returns
 /// the latest value, even if the webview missed the live event.
 pub fn emit_connection(handle: &AppHandle, status: &ConnectionStatus) {
+    tracing::info!(
+        "emit_connection: log_tailing={} addon={} path={:?}",
+        status.log_tailing, status.addon_connected, status.wow_path
+    );
     // Update managed state (best-effort; state registered in lib.rs setup()).
     if let Some(state) = handle.try_state::<Mutex<ConnectionStatus>>() {
         if let Ok(mut guard) = state.lock() {
