@@ -126,23 +126,38 @@ function OverlayApp() {
   // Audio cues kept in a ref — no re-renders needed when config reloads
   const audioCuesRef = useRef<AudioCue[]>([]);
 
-  // Load panel positions and audio config from config on mount.
-  // Also pre-decode any custom audio files in the background so first-hit
-  // playback is instant rather than decoding on demand.
+  // Load audio cues once on mount and pre-decode any custom files.
+  // Audio files are cached in _audioBufferCache so re-running on interval
+  // is safe (preloadAudioBuffer returns immediately on cache hit).
   useEffect(() => {
     invoke<AppConfig>("get_config")
       .then((cfg) => {
-        setPanels(cfg.panel_positions ?? []);
         const cues = cfg.audio_cues ?? [];
         audioCuesRef.current = cues;
-        // Fire-and-forget — errors are logged inside preloadAudioBuffer
         for (const cue of cues) {
-          if (cue.sound_path) {
-            void preloadAudioBuffer(cue.sound_path);
-          }
+          if (cue.sound_path) void preloadAudioBuffer(cue.sound_path);
         }
       })
-      .catch(() => {}); // No config yet — panels use default positions
+      .catch(() => {});
+  }, []);
+
+  // Poll for panel position changes every second so edits made in the
+  // Settings window (Overlay Layout tab) are reflected in real time.
+  // Uses a JSON-equality check to skip re-renders when nothing has changed.
+  useEffect(() => {
+    const syncPanels = () => {
+      invoke<AppConfig>("get_config")
+        .then((cfg) => {
+          const next = cfg.panel_positions ?? [];
+          setPanels((prev) =>
+            JSON.stringify(prev) === JSON.stringify(next) ? prev : next
+          );
+        })
+        .catch(() => {});
+    };
+    syncPanels(); // immediate load on mount
+    const id = setInterval(syncPanels, 1_000);
+    return () => clearInterval(id);
   }, []);
 
   // Subscribe to backend IPC events
