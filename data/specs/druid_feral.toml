@@ -1,0 +1,31 @@
+﻿# Feral Druid -- spec profile
+
+[spec]
+class       = "DRUID"
+spec        = "Feral"
+role        = "DAMAGER"
+description = "Feral Druid energy pooling, combo point, and Berserk burst tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    106951, # Berserk                (primary burst CD, 3 min CD)
+    102543, # Incarnation: King of the Jungle (talented Berserk upgrade)
+    323764, # Convoke the Spirits    (talented channel CD, 2 min CD)
+    102401, # Wild Charge            (mobility CD)
+    5217,   # Tiger's Fury           (energy refund + damage buff, 30s CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    22812,  # Barkskin               (12% DR, 1 min CD)
+    61336,  # Survival Instincts     (50% DR, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    1079,   # Rip                    (primary finisher DoT)
+    8921,   # Moonfire               (Galactic Guardian proc / DoT)
+    155722, # Rake                   (primary builder DoT)
+    22568,  # Ferocious Bite         (execute finisher)
+    33876,  # Mangle                 (Bleed damage bonus)
+]

@@ -1,0 +1,33 @@
+﻿# Arms Warrior -- spec profile
+
+[spec]
+class       = "WARRIOR"
+spec        = "Arms"
+role        = "DAMAGER"
+description = "Arms Warrior Avatar and Bladestorm burst window tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    227847, # Bladestorm             (primary AoE CD, 1.5 min CD)
+    107574, # Avatar                 (primary damage CD, 1.5 min CD)
+    262161, # Warbreaker             (talented AoE debuff CD)
+    46924,  # Bladestorm             (alternate ID variant)
+    118000, # Dragon Roar            (talented AoE CD)
+    385059, # Spear of Bastion       (talented Kyrian CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    871,    # Shield Wall            (40% DR, 4 min CD)
+    23920,  # Spell Reflect          (reflect + 20% DR)
+    55694,  # Enraged Regeneration   (self-heal, 1 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    772,    # Rend                   (primary bleed DoT)
+    1715,   # Hamstring              (slow utility)
+    5308,   # Execute                (sub-20% execute)
+    260708, # Sweeping Strikes       (AoE enabler)
+    845,    # Cleave                 (AoE Rage spender)
+]

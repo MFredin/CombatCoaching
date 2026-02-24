@@ -1,0 +1,30 @@
+﻿# Augmentation Evoker -- spec profile
+
+[spec]
+class       = "EVOKER"
+spec        = "Augmentation"
+role        = "DAMAGER"
+description = "Augmentation Evoker support buff and Breath of Eons major cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    395152, # Breath of Eons         (primary ramp CD, 2 min CD)
+    370553, # Tip the Scales         (instant empower cast)
+    357210, # Deep Breath            (AoE damage CD, 1.5 min CD)
+    404977, # Spatial Paradox        (talented extend-range CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    363916, # Obsidian Scales        (primary DR CD)
+    374348, # Renewing Blaze         (self-heal CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    395296, # Prescience             (buff ally CD)
+    370455, # Eruption               (primary damage Essence spender)
+    396286, # Upheaval               (empowered AoE damage)
+    395854, # Blistering Scales      (ally damage-absorb buff)
+    404977, # Spatial Paradox        (talented extend-range CD)
+]

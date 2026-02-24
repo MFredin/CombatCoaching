@@ -49,15 +49,20 @@ function SettingsApp() {
     interrupt_count: 0, encounter_name: null,
   });
   const [eventCount, setEventCount]   = useState(0);
+  const [eventLog, setEventLog]       = useState<string[]>([]);
   const [overlayOn, setOverlayOn]     = useState(true);
+  // Actual overlay screen dimensions for the layout editor (fetched once on mount)
+  const [screenSize, setScreenSize]   = useState<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
-  // Load config and spec list on mount
+  // Load config, spec list, and screen size on mount
   useEffect(() => {
     invoke<AppConfig>("get_config").then((cfg) => {
       setConfig(cfg);
       setOverlayOn(cfg.overlay_visible ?? true);
     }).catch(console.error);
     invoke<SpecInfo[]>("list_specs").then(setSpecs).catch(() => setSpecs([]));
+    invoke<{ width: number; height: number }>("get_screen_size")
+      .then(setScreenSize).catch(() => {});
   }, []);
 
   // Reload WTF character list when log path changes
@@ -76,6 +81,11 @@ function SettingsApp() {
     onAdvice: useCallback((a: AdviceEvent) => {
       setEventCount((n) => n + 1);
       setAdvice((prev) => [a, ...prev.filter((x) => x.key !== a.key)].slice(0, 50));
+    }, []),
+    onEventLog: useCallback((entries: string[]) => {
+      // Append newest entries at the end (log-style: oldest at top, newest at bottom).
+      // Keep at most 500 entries total.
+      setEventLog((prev) => [...prev, ...entries].slice(-500));
     }, []),
   });
 
@@ -139,6 +149,15 @@ function SettingsApp() {
     if (typeof selected === "string") await save({ ...config, addon_sv_path: selected });
   }
 
+  async function autoDetectAddon() {
+    const found = await invoke<string | null>("auto_detect_addon_path");
+    if (found) {
+      await save({ ...config, addon_sv_path: found });
+    } else {
+      alert("CombatCoach.lua not found. Make sure:\n1. The addon is installed and loaded in WoW\n2. You have typed /reload in WoW at least once after installing the addon");
+    }
+  }
+
   function updatePanels(positions: PanelPosition[]) {
     const updated = { ...config, panel_positions: positions };
     setConfig(updated);
@@ -192,7 +211,7 @@ function SettingsApp() {
         <div style={{ padding: "0 20px", borderRight: "1px solid var(--stroke)", minWidth: 180 }}>
           <div style={{ fontWeight: 700, fontSize: 14, lineHeight: "42px", color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.04em" }}>CombatLedger</div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: -8, paddingBottom: 6 }}>
-            Live Coach v1.2.7
+            Live Coach v1.2.8
           </div>
         </div>
 
@@ -236,10 +255,13 @@ function SettingsApp() {
             config={config} setConfig={setConfig} save={save}
             wtfChars={wtfChars} detectPath={detectPath}
             browsePath={browsePath} browseAddonPath={browseAddonPath}
+            autoDetectAddon={autoDetectAddon}
             detectMsg={detectMsg} updateInfo={updateInfo}
             updateChecking={updateChecking} checkForUpdates={checkForUpdates}
             intensityLabels={intensityLabels} updatePanels={updatePanels}
             specs={specs} applySpec={applySpec}
+            connStatus={connStatus}
+            screenSize={screenSize}
           />
         )}
         {tab === "livefeed" && (
@@ -247,6 +269,7 @@ function SettingsApp() {
             advice={advice} snapshot={snapshot}
             eventCount={eventCount} connStatus={connStatus}
             playerFocus={config.player_focus ?? ""}
+            eventLog={eventLog}
           />
         )}
         {tab === "audio"    && <AudioTab   config={config} save={save} />}
@@ -266,29 +289,32 @@ function SettingsApp() {
 // HOME TAB
 // ===========================================================================
 interface HomeTabProps {
-  config:          AppConfig;
-  setConfig:       (c: AppConfig) => void;
-  save:            (c: AppConfig) => Promise<void>;
-  wtfChars:        WtfCharacter[];
-  detectPath:      () => void;
-  browsePath:      () => void;
-  browseAddonPath: () => void;
-  detectMsg:       string;
-  updateInfo:      UpdateInfo | null;
-  updateChecking:  boolean;
-  checkForUpdates: () => void;
-  intensityLabels: Record<number, string>;
-  updatePanels:    (p: PanelPosition[]) => void;
-  specs:           SpecInfo[];
-  applySpec:       (key: string) => Promise<void>;
+  config:           AppConfig;
+  setConfig:        (c: AppConfig) => void;
+  save:             (c: AppConfig) => Promise<void>;
+  wtfChars:         WtfCharacter[];
+  detectPath:       () => void;
+  browsePath:       () => void;
+  browseAddonPath:  () => void;
+  autoDetectAddon:  () => void;
+  detectMsg:        string;
+  updateInfo:       UpdateInfo | null;
+  updateChecking:   boolean;
+  checkForUpdates:  () => void;
+  intensityLabels:  Record<number, string>;
+  updatePanels:     (p: PanelPosition[]) => void;
+  specs:            SpecInfo[];
+  applySpec:        (key: string) => Promise<void>;
+  connStatus:       ConnStatus;
+  screenSize:       { width: number; height: number };
 }
 
 function HomeTab({
   config, setConfig, save, wtfChars,
-  detectPath, browsePath, browseAddonPath, detectMsg,
+  detectPath, browsePath, browseAddonPath, autoDetectAddon, detectMsg,
   updateInfo, updateChecking, checkForUpdates,
   intensityLabels, updatePanels,
-  specs, applySpec,
+  specs, applySpec, connStatus, screenSize,
 }: HomeTabProps) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", height: "100%" }}>
@@ -313,41 +339,73 @@ function HomeTab({
         </div>
 
         <div className="section">
-          <h3>Coached Character</h3>
-          {wtfChars.length > 0 ? (
-            <>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
-                Detected from WTF folder — no addon required.
-              </div>
-              <select
-                value={config.player_focus ?? ""}
-                onChange={(e) => {
-                  const updated = { ...config, player_focus: e.target.value };
-                  setConfig(updated);
-                  void save(updated);
-                }}
-                style={{ width: "100%", fontSize: 12 }}
-              >
-                <option value="">— Auto-detect from log —</option>
-                {wtfChars.map((c) => (
-                  <option key={`${c.name}-${c.realm}`} value={`${c.name}-${c.realm}`}>
-                    {c.name} ({c.realm})
-                  </option>
-                ))}
-              </select>
-            </>
+          <h3>CombatCoach Addon</h3>
+          {connStatus.addon_connected ? (
+            <div style={{
+              background: "rgba(43,213,118,0.08)",
+              border: "1px solid var(--good)",
+              borderRadius: "var(--radius)",
+              padding: "8px 10px",
+              fontSize: 11,
+              color: "var(--good)",
+              marginBottom: 6,
+            }}>
+              ✅ Addon connected — character and spec auto-detected.
+            </div>
           ) : (
             <>
               <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
-                {config.wow_log_path ? "No characters found in WTF folder." : "Set Logs folder above first."}
+                Install the CombatCoach addon and type <code>/reload</code> in WoW for real-time identity detection.
               </div>
               <div style={{ fontSize: 11, color: "var(--muted)", wordBreak: "break-all", marginBottom: 6 }}>
-                Addon SVars: {config.addon_sv_path || "Not configured"}
+                {config.addon_sv_path
+                  ? <span style={{ color: "var(--text)" }}>✓ {config.addon_sv_path}</span>
+                  : "SavedVariables not configured"}
               </div>
-              <button onClick={browseAddonPath}>Browse addon SVars…</button>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button onClick={autoDetectAddon}>Auto-detect</button>
+                <button onClick={browseAddonPath}>Browse…</button>
+                {config.addon_sv_path && (
+                  <button onClick={() => void save({ ...config, addon_sv_path: "" })}>Clear</button>
+                )}
+              </div>
             </>
           )}
         </div>
+
+        {/* Hide character + spec selectors when the addon is providing identity */}
+        {!connStatus.addon_connected && (
+          <div className="section">
+            <h3>Coached Character</h3>
+            {wtfChars.length > 0 ? (
+              <>
+                <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
+                  Detected from WTF folder — no addon required.
+                </div>
+                <select
+                  value={config.player_focus ?? ""}
+                  onChange={(e) => {
+                    const updated = { ...config, player_focus: e.target.value };
+                    setConfig(updated);
+                    void save(updated);
+                  }}
+                  style={{ width: "100%", fontSize: 12 }}
+                >
+                  <option value="">— Auto-detect from log —</option>
+                  {wtfChars.map((c) => (
+                    <option key={`${c.name}-${c.realm}`} value={`${c.name}-${c.realm}`}>
+                      {c.name} ({c.realm})
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <div style={{ fontSize: 10, color: "var(--muted)", fontStyle: "italic" }}>
+                {config.wow_log_path ? "No characters found in WTF folder." : "Set Logs folder above first."}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="section">
           <h3>Coaching Intensity</h3>
@@ -365,29 +423,32 @@ function HomeTab({
           </div>
         </div>
 
-        <div className="section">
-          <h3>Spec Profile</h3>
-          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
-            Selects cooldown spell IDs for the drift rule. Auto-detected if the addon is installed.
-          </div>
-          <select
-            value={config.selected_spec ?? ""}
-            onChange={(e) => void applySpec(e.target.value)}
-            style={{ width: "100%", fontSize: 12 }}
-          >
-            <option value="">— Auto (from addon) —</option>
-            {specs.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.class} — {s.spec} ({s.role})
-              </option>
-            ))}
-          </select>
-          {config.selected_spec && (
-            <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
-              Active: {config.selected_spec}
+        {/* Hide spec selector when addon manages identity */}
+        {!connStatus.addon_connected && (
+          <div className="section">
+            <h3>Spec Profile</h3>
+            <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
+              Selects cooldown spell IDs for the drift rule. Auto-detected if the addon is installed.
             </div>
-          )}
-        </div>
+            <select
+              value={config.selected_spec ?? ""}
+              onChange={(e) => void applySpec(e.target.value)}
+              style={{ width: "100%", fontSize: 12 }}
+            >
+              <option value="">— Auto (from addon) —</option>
+              {specs.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.class} — {s.spec} ({s.role})
+                </option>
+              ))}
+            </select>
+            {config.selected_spec && (
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+                Active: {config.selected_spec}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="section">
           <h3>Updates</h3>
@@ -431,6 +492,8 @@ function HomeTab({
         <OverlayLayoutEditor
           positions={config.panel_positions ?? []}
           onPositionChange={updatePanels}
+          screenWidth={screenSize.width}
+          screenHeight={screenSize.height}
         />
       </main>
     </div>
@@ -446,14 +509,24 @@ interface LiveFeedTabProps {
   eventCount:   number;
   connStatus:   ConnStatus;
   playerFocus:  string;
+  eventLog:     string[];
 }
 
-function LiveFeedTab({ advice, snapshot, eventCount, connStatus, playerFocus }: LiveFeedTabProps) {
-  const feedRef = useRef<HTMLDivElement>(null);
+function LiveFeedTab({ advice, snapshot, eventCount, connStatus, playerFocus, eventLog }: LiveFeedTabProps) {
+  const feedRef    = useRef<HTMLDivElement>(null);
+  const eventFeedRef = useRef<HTMLDivElement>(null);
+  const [subTab, setSubTab] = useState<"advice" | "eventfeed">("advice");
 
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = 0;
   }, [advice.length]);
+
+  // Auto-scroll event feed to bottom when new entries arrive
+  useEffect(() => {
+    if (eventFeedRef.current && subTab === "eventfeed") {
+      eventFeedRef.current.scrollTop = eventFeedRef.current.scrollHeight;
+    }
+  }, [eventLog.length, subTab]);
 
   // Smooth pull timer: extrapolates pull_elapsed_ms between log-event batches.
   // WoW writes the combat log in chunks (every ~0.5–2 s); without this, the
@@ -547,61 +620,107 @@ function LiveFeedTab({ advice, snapshot, eventCount, connStatus, playerFocus }: 
         <StatBlock label="Errors"       value={advice.filter((a) => a.severity === "bad").length.toString()}  color="var(--bad)" />
       </aside>
 
-      {/* Right: live advice feed */}
+      {/* Right: sub-tabbed feed */}
       <main style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Sub-tab bar */}
         <div style={{
-          padding: "10px 16px", borderBottom: "1px solid var(--stroke)",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "0 16px", borderBottom: "1px solid var(--stroke)",
+          display: "flex", alignItems: "stretch", gap: 0,
           flexShrink: 0,
         }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Live Advice Feed</div>
-          <div style={{ fontSize: 11, color: "var(--muted)" }}>
-            {advice.length} card{advice.length !== 1 ? "s" : ""} · newest first
-          </div>
-        </div>
-
-        <div
-          ref={feedRef}
-          style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}
-        >
-          {advice.length === 0 ? (
-            <div style={{ color: "var(--muted)", fontSize: 12, fontStyle: "italic", paddingTop: 8 }}>
-              No events yet — start a pull in WoW to see coaching events here.
-            </div>
-          ) : advice.map((a) => (
-            <div key={a.key} style={{
-              background: "var(--bg-card)",
-              border: `1px solid ${sevColor[a.severity] ?? "var(--stroke)"}44`,
-              borderLeft: `3px solid ${sevColor[a.severity] ?? "var(--stroke)"}`,
-              borderRadius: "var(--radius-lg)", padding: "10px 14px",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: 1,
-                  color: sevColor[a.severity], textTransform: "uppercase",
-                }}>
-                  {a.severity}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{a.title}</span>
-                <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--muted)" }}>
-                  {new Date(a.timestamp_ms).toLocaleTimeString()}
-                </span>
-              </div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: a.kv.length > 0 ? 6 : 0 }}>
-                {a.message}
-              </div>
-              {a.kv.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
-                  {a.kv.map(([k, v]) => (
-                    <span key={k} style={{ fontSize: 11, color: "var(--muted)" }}>
-                      <span style={{ color: "var(--text)", fontWeight: 500 }}>{k}:</span> {v}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+          {(["advice", "eventfeed"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setSubTab(t)}
+              style={{
+                borderRadius: 0, border: "none",
+                borderBottom: subTab === t ? "2px solid var(--accent)" : "2px solid transparent",
+                background: "none",
+                color: subTab === t ? "var(--text)" : "var(--muted)",
+                fontWeight: subTab === t ? 600 : 400,
+                fontSize: 12, padding: "10px 14px", cursor: "pointer",
+              }}
+            >
+              {t === "advice" ? `🎯 Live Advice (${advice.length})` : `📋 Event Feed (${eventLog.length})`}
+            </button>
           ))}
         </div>
+
+        {/* Live Advice sub-tab */}
+        {subTab === "advice" && (
+          <div
+            ref={feedRef}
+            style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}
+          >
+            {advice.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 12, fontStyle: "italic", paddingTop: 8 }}>
+                No advice yet — start a pull in WoW to see coaching events here.
+              </div>
+            ) : advice.map((a) => (
+              <div key={a.key} style={{
+                background: "var(--bg-card)",
+                border: `1px solid ${sevColor[a.severity] ?? "var(--stroke)"}44`,
+                borderLeft: `3px solid ${sevColor[a.severity] ?? "var(--stroke)"}`,
+                borderRadius: "var(--radius-lg)", padding: "10px 14px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                    color: sevColor[a.severity], textTransform: "uppercase",
+                  }}>
+                    {a.severity}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{a.title}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--muted)" }}>
+                    {new Date(a.timestamp_ms).toLocaleTimeString()}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: a.kv.length > 0 ? 6 : 0 }}>
+                  {a.message}
+                </div>
+                {a.kv.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+                    {a.kv.map(([k, v]) => (
+                      <span key={k} style={{ fontSize: 11, color: "var(--muted)" }}>
+                        <span style={{ color: "var(--text)", fontWeight: 500 }}>{k}:</span> {v}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Event Feed sub-tab */}
+        {subTab === "eventfeed" && (
+          <div ref={eventFeedRef} style={{ flex: 1, overflow: "auto", padding: 16 }}>
+            {eventLog.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 12, fontStyle: "italic", paddingTop: 8 }}>
+                No events yet — events appear here when combat starts, advice fires, or connection status changes.
+              </div>
+            ) : (
+              <div style={{ fontFamily: "var(--mono)", fontSize: 11, lineHeight: 1.8 }}>
+                {eventLog.map((entry, i) => (
+                  <div key={i} style={{
+                    color: entry.includes("❌") ? "var(--bad)"
+                         : entry.includes("⚠️") ? "var(--warn)"
+                         : entry.includes("✅") ? "var(--good)"
+                         : entry.includes("🔴") ? "#f87171"
+                         : entry.includes("🟢") ? "var(--good)"
+                         : entry.includes("🏆") ? "var(--good)"
+                         : entry.includes("💀") ? "var(--bad)"
+                         : "var(--muted)",
+                    borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    padding: "2px 0",
+                  }}>
+                    {entry}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

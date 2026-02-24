@@ -1,0 +1,30 @@
+﻿# Havoc Demon Hunter -- spec profile
+
+[spec]
+class       = "DEMON_HUNTER"
+spec        = "Havoc"
+role        = "DAMAGER"
+description = "Havoc Demon Hunter mobility and Metamorphosis burst tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    191427, # Metamorphosis          (major damage CD, 3 min CD)
+    198793, # Vengeful Retreat       (mobility / combo with Fel Rush)
+    187827, # Blade Dance            (primary AoE ability)
+    185123, # Throw Glaive           (ranged filler)
+    196718, # Darkness               (party DR, 3 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    196718, # Darkness
+    212800, # Blur                   (50% dodge, 1 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    179057, # Chaos Strike           (primary Fury spender)
+    228477, # Fel Rush               (gap closer / damage)
+    202138, # Eye Beam               (Demonic proc / burst)
+    185123, # Throw Glaive           (ranged filler)
+]

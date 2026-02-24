@@ -1,0 +1,28 @@
+﻿# Windwalker Monk -- spec profile
+
+[spec]
+class       = "MONK"
+spec        = "Windwalker"
+role        = "DAMAGER"
+description = "Windwalker Monk Storm, Earth, and Fire burst and Chi management tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    137639, # Storm, Earth, and Fire (primary burst CD, 1.5 min CD)
+    123904, # Invoke Xuen the White Tiger (talented CD, 3 min CD)
+    116841, # Tiger's Lust           (mobility CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    122278, # Dampen Harm            (large-hit reduction)
+    122783, # Diffuse Magic          (magical DR, 1.5 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    100787, # Tiger Palm             (primary Chi generator)
+    100784, # Blackout Kick          (primary Chi spender)
+    113656, # Fists of Fury          (channel burst, 1.6 min CD)
+    107428, # Rising Sun Kick        (Rising Sun Kick, 10s CD)
+]

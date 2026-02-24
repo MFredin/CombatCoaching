@@ -19,6 +19,37 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc::Receiver;
 
 // ---------------------------------------------------------------------------
+// Event log queue — distinct type so it can coexist with VecDeque<AdviceEvent>
+// in Tauri managed state (different types = different state slots).
+// ---------------------------------------------------------------------------
+
+/// Ring-buffered string queue for the Event Feed panel in the settings window.
+/// Entries are human-readable formatted strings describing significant events
+/// (advice fired, combat transitions, encounter start/end, connection changes).
+pub struct EventLogQueue {
+    inner: VecDeque<String>,
+}
+
+impl EventLogQueue {
+    pub fn new() -> Self {
+        Self { inner: VecDeque::new() }
+    }
+
+    /// Push an entry, capping the buffer at 200 entries.
+    pub fn push(&mut self, entry: String) {
+        self.inner.push_back(entry);
+        if self.inner.len() > 200 {
+            self.inner.pop_front();
+        }
+    }
+
+    /// Drain all entries (atomically clear and return them).
+    pub fn drain(&mut self) -> Vec<String> {
+        self.inner.drain(..).collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Event name constants — must match the TypeScript side in src/types/events.ts
 // ---------------------------------------------------------------------------
 pub const EVENT_ADVICE:     &str = "coach:advice";
@@ -91,6 +122,10 @@ pub async fn run(
     mut debrief_rx: Receiver<PullDebrief>,
     app_handle:     AppHandle,
 ) -> Result<()> {
+    // Track previous combat state to detect transitions for the event log.
+    let mut prev_in_combat     = false;
+    let mut prev_encounter:    Option<String> = None;
+
     loop {
         tokio::select! {
             Some(advice) = advice_rx.recv() => {
@@ -99,8 +134,20 @@ pub async fn run(
                 // Primary delivery: push to managed ring buffer for drain polling
                 if let Some(state) = app_handle.try_state::<Mutex<VecDeque<AdviceEvent>>>() {
                     if let Ok(mut q) = state.lock() {
-                        q.push_back(advice);
+                        q.push_back(advice.clone());
                         if q.len() > 50 { q.pop_front(); } // cap ring buffer at 50
+                    }
+                }
+                // Event log: record each advice event so the Event Feed shows it
+                if let Some(eq) = app_handle.try_state::<Mutex<EventLogQueue>>() {
+                    if let Ok(mut q) = eq.lock() {
+                        let sev_icon = match advice.severity {
+                            crate::engine::Severity::Good => "✅",
+                            crate::engine::Severity::Warn => "⚠️",
+                            crate::engine::Severity::Bad  => "❌",
+                        };
+                        let ts = chrono_hms(advice.timestamp_ms);
+                        q.push(format!("[{}] {} {} — {}", ts, sev_icon, advice.title, advice.message));
                     }
                 }
             }
@@ -110,18 +157,72 @@ pub async fn run(
                 // Primary delivery: overwrite managed snapshot for poll
                 if let Some(state) = app_handle.try_state::<Mutex<StateSnapshot>>() {
                     if let Ok(mut s) = state.lock() {
-                        *s = snap;
+                        *s = snap.clone();
+                    }
+                }
+                // Event log: combat state transitions + encounter changes
+                if let Some(eq) = app_handle.try_state::<Mutex<EventLogQueue>>() {
+                    if let Ok(mut q) = eq.lock() {
+                        let ts = chrono_hms(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as u64
+                        );
+                        // Combat start
+                        if !prev_in_combat && snap.in_combat {
+                            let name = snap.encounter_name.as_deref().unwrap_or("Open World");
+                            q.push(format!("[{}] 🔴 Combat started — {}", ts, name));
+                        }
+                        // Combat end
+                        if prev_in_combat && !snap.in_combat {
+                            q.push(format!("[{}] ⚫ Combat ended", ts));
+                        }
+                        // Encounter name change (new boss / M+ pack)
+                        if snap.encounter_name != prev_encounter && snap.encounter_name.is_some() {
+                            if let Some(ref enc) = snap.encounter_name {
+                                q.push(format!("[{}] 🏰 Encounter: {}", ts, enc));
+                            }
+                        }
+                        prev_in_combat  = snap.in_combat;
+                        prev_encounter  = snap.encounter_name;
                     }
                 }
             }
             Some(debrief) = debrief_rx.recv() => {
-                // Best-effort emit only (debrief polling deferred to v1.0.5)
+                // Best-effort emit only
                 let _ = app_handle.emit(EVENT_DEBRIEF, &debrief);
+                // Event log: pull summary
+                if let Some(eq) = app_handle.try_state::<Mutex<EventLogQueue>>() {
+                    if let Ok(mut q) = eq.lock() {
+                        let ts = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        let elapsed_s = debrief.pull_elapsed_ms / 1000;
+                        let icon = if debrief.outcome == "kill" { "🏆" } else { "💀" };
+                        q.push(format!(
+                            "[{}] {} Pull #{} — {} — {}s, {} advice, {} avoidable",
+                            chrono_hms(ts), icon,
+                            debrief.pull_number, debrief.outcome,
+                            elapsed_s, debrief.total_advice_fired, debrief.avoidable_count
+                        ));
+                    }
+                }
             }
             else => break,
         }
     }
     Ok(())
+}
+
+/// Format a Unix-epoch millisecond timestamp as "HH:MM:SS" for the event log.
+fn chrono_hms(ts_ms: u64) -> String {
+    let total_secs = (ts_ms / 1000) % 86_400; // seconds into the day (UTC)
+    let h = total_secs / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    format!("{:02}:{:02}:{:02}", h, m, s)
 }
 
 /// Convenience function — emit a connection status update from anywhere
@@ -138,7 +239,23 @@ pub fn emit_connection(handle: &AppHandle, status: &ConnectionStatus) {
     // Update managed state (best-effort; state registered in lib.rs setup()).
     if let Some(state) = handle.try_state::<Mutex<ConnectionStatus>>() {
         if let Ok(mut guard) = state.lock() {
+            let prev = guard.clone();
             *guard = status.clone();
+            // Event log: only log when connection status CHANGES (not every heartbeat)
+            drop(guard);
+            if prev.log_tailing != status.log_tailing || prev.addon_connected != status.addon_connected {
+                if let Some(eq) = handle.try_state::<Mutex<EventLogQueue>>() {
+                    if let Ok(mut q) = eq.lock() {
+                        let ts = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        let log_str = if status.log_tailing { "🟢 Log connected" } else { "🔴 Log disconnected" };
+                        let addon_str = if status.addon_connected { " · Addon connected" } else { "" };
+                        q.push(format!("[{}] {}{}", chrono_hms(ts), log_str, addon_str));
+                    }
+                }
+            }
         }
     }
     if let Err(e) = handle.emit(EVENT_CONNECTION, status) {

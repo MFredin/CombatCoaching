@@ -1,0 +1,29 @@
+﻿# Enhancement Shaman -- spec profile
+
+[spec]
+class       = "SHAMAN"
+spec        = "Enhancement"
+role        = "DAMAGER"
+description = "Enhancement Shaman Feral Spirit burst and Maelstrom Weapon proc tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    51533,  # Feral Spirit           (primary wolf burst CD, 2.5 min CD)
+    114051, # Ascendance             (talented melee burst CD, 3 min CD)
+    197214, # Sundering              (talented AoE knockback CD)
+    192249, # Storm Elemental        (talented DPS totem CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    108271, # Astral Shift           (40% DR, 1.5 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    17364,  # Stormstrike            (primary melee attack)
+    60103,  # Lava Lash              (secondary melee + Flame Shock spread)
+    73680,  # Unleash Elements       (talented enhancer)
+    188196, # Lightning Bolt         (Maelstrom Weapon spender)
+    10444,  # Flametongue Attack     (proc applicator)
+]

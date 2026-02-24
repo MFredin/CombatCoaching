@@ -1,0 +1,31 @@
+﻿# Beast Mastery Hunter -- spec profile
+
+[spec]
+class       = "HUNTER"
+spec        = "Beast Mastery"
+role        = "DAMAGER"
+description = "Beast Mastery Hunter Bestial Wrath and Aspect of the Wild burst tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    193530, # Aspect of the Wild     (primary burst CD, 2 min CD)
+    193455, # Bestial Wrath          (pet damage CD, 1.5 min CD)
+    321530, # Bloodshed              (talented pet bleed CD)
+    19574,  # Bestial Wrath          (legacy ID variant)
+    120360, # Barrage                (talented AoE CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    186265, # Aspect of the Turtle   (100% dodge channel, 3 min CD)
+    109304, # Exhilaration           (self-heal, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    34026,  # Kill Command           (primary Focus spender)
+    56641,  # Steady Shot            (Focus generator)
+    185358, # Arcane Shot            (Focus spender filler)
+    2643,   # Multi-Shot             (AoE Beast Cleave trigger)
+    19434,  # Aimed Shot             (MM bleed-over ID, unused in BM)
+]

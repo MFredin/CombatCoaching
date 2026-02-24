@@ -1,0 +1,31 @@
+﻿# Vengeance Demon Hunter -- spec profile
+
+[spec]
+class       = "DEMON_HUNTER"
+spec        = "Vengeance"
+role        = "TANK"
+description = "Vengeance Demon Hunter active mitigation and Fiery Brand tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    187827, # Blade Dance            (AoE damage + mitigation)
+    204021, # Fiery Brand            (primary debuff/CD, 1 min CD)
+    196718, # Darkness               (party DR, 3 min CD)
+    212084, # Fel Devastation        (channel heal + damage)
+    347461, # Fodder to the Flame    (talented cooldown)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    204021, # Fiery Brand
+    203720, # Demon Spikes           (primary dodge CD)
+    196718, # Darkness
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    228477, # Immolation Aura        (sustained AoE damage)
+    203782, # Shear                  (primary Fury builder)
+    209426, # Soul Cleave            (primary Fury spender / heal)
+    228477, # Fel Eruption           (talented stun / damage)
+]

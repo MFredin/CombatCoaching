@@ -1,0 +1,31 @@
+﻿# Elemental Shaman -- spec profile
+
+[spec]
+class       = "SHAMAN"
+spec        = "Elemental"
+role        = "DAMAGER"
+description = "Elemental Shaman Stormkeeper burst and Lava Burst proc tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    191634, # Stormkeeper            (empower Lightning Bolt, 1 min CD)
+    198067, # Fire Elemental         (totem burst CD, 5 min CD)
+    192249, # Storm Elemental        (talented DPS totem CD)
+    114050, # Ascendance             (talented burst CD, 3 min CD)
+    204361, # Liquid Magma Totem     (talented AoE CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    108271, # Astral Shift           (40% DR, 1.5 min CD)
+    192082, # Wind Rush Totem        (party speed, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    188196, # Lightning Bolt         (primary filler)
+    8042,   # Earth Shock            (Maelstrom spender)
+    51505,  # Lava Burst             (guaranteed crit on Flame Shocked target)
+    114074, # Elemental Blast        (talented Maelstrom spender)
+    61882,  # Earthquake             (AoE Maelstrom spender)
+]

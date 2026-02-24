@@ -1,0 +1,31 @@
+﻿# Mistweaver Monk -- spec profile
+
+[spec]
+class       = "MONK"
+spec        = "Mistweaver"
+role        = "HEALER"
+description = "Mistweaver Monk Thunder Focus Tea and Revival major cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    116680, # Thunder Focus Tea      (empowering CD, 30s CD)
+    322118, # Invoke Yu'lon the Jade Serpent (major healing CD, 3 min CD)
+    197908, # Mana Tea               (mana restore channel)
+    115310, # Revival                (raid-wide dispel + heal, 3 min CD)
+    191840, # Enveloping Mist        (Chi-cost direct HoT)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    122278, # Dampen Harm            (large-hit reduction)
+    122783, # Diffuse Magic          (magical DR, 1.5 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    115151, # Renewing Mist          (HoT spreader, 9s CD)
+    116670, # Vivify                 (smart heal via Renewing Mist)
+    124682, # Enveloping Mist        (HoT + healing bonus)
+    119611, # Essence Font           (AoE HoT channel)
+    117952, # Crackling Jade Lightning (fistweaving filler)
+]

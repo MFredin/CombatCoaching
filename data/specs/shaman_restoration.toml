@@ -1,0 +1,30 @@
+﻿# Restoration Shaman -- spec profile
+
+[spec]
+class       = "SHAMAN"
+spec        = "Restoration"
+role        = "HEALER"
+description = "Restoration Shaman Healing Tide Totem and Spirit Link major cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    108280, # Healing Tide Totem     (major raid heal CD, 3 min CD)
+    98008,  # Spirit Link Totem      (damage equalization CD, 3 min CD)
+    16188,  # Ancestral Guidance     (talented % heal CD, 2 min CD)
+    114052, # Ascendance             (talented healing CD, 3 min CD)
+    207399, # Ancestral Protection Totem (death prevention, 5 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    108271, # Astral Shift           (40% DR, 1.5 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    8004,   # Healing Surge          (fast single-target heal)
+    1064,   # Chain Heal             (primary AoE heal)
+    77472,  # Healing Wave           (efficient single-target heal)
+    5394,   # Healing Stream Totem   (passive AoE totem, 30s CD)
+    98008,  # Spirit Link Totem      (damage equalization)
+]

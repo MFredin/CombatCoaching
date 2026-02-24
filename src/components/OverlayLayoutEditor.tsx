@@ -11,9 +11,9 @@ import type { PanelPosition } from "../types/events";
 import styles from "./OverlayLayoutEditor.module.css";
 
 // Scale: editor canvas width / real screen width
-const SCALE = 0.30;
-const W     = Math.round(1920 * SCALE); // 576 px
-const H     = Math.round(1080 * SCALE); // 324 px
+// Default to 1920×1080; overridden by the screenWidth/screenHeight props when
+// the parent component has fetched the actual overlay monitor dimensions.
+const PREVIEW_CANVAS_PX = 576; // editor canvas is always ~576 px wide
 
 const PANEL_LABELS: Record<string, string> = {
   pull_clock:   "Pull Clock",
@@ -32,9 +32,18 @@ const PANEL_COLORS: Record<string, string> = {
 interface Props {
   positions:        PanelPosition[];
   onPositionChange: (updated: PanelPosition[]) => void;
+  /** Actual overlay monitor width in physical pixels (default 1920). */
+  screenWidth?:     number;
+  /** Actual overlay monitor height in physical pixels (default 1080). */
+  screenHeight?:    number;
 }
 
-export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
+export function OverlayLayoutEditor({ positions, onPositionChange, screenWidth = 1920, screenHeight = 1080 }: Props) {
+  // Compute scale so the preview canvas is always PREVIEW_CANVAS_PX wide.
+  const scale = PREVIEW_CANVAS_PX / screenWidth;
+  const W     = PREVIEW_CANVAS_PX;
+  const H     = Math.round(screenHeight * scale);
+
   function patch(id: string, changes: Partial<PanelPosition>) {
     onPositionChange(
       positions.map((p) => (p.id === id ? { ...p, ...changes } : p))
@@ -45,14 +54,14 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
     <div className={styles.wrap}>
       {/* ── Preview canvas ── */}
       <div className={styles.hint}>
-        Preview (30 % scale — 576 × 324 px represents 1920 × 1080).
+        Preview ({Math.round(scale * 100)}% scale — {W} × {H} px represents {screenWidth} × {screenHeight}).
         Set exact pixel positions using the X / Y inputs below.
       </div>
 
       <div className={styles.canvas} style={{ width: W, height: H }}>
         {positions.map((p) => {
-          const left = Math.min(Math.max(0, p.x * SCALE), W - 4);
-          const top  = Math.min(Math.max(0, p.y * SCALE), H - 4);
+          const left = Math.min(Math.max(0, p.x * scale), W - 4);
+          const top  = Math.min(Math.max(0, p.y * scale), H - 4);
           return (
             <div
               key={p.id}
@@ -95,7 +104,7 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
                 <input
                   type="number"
                   min={0}
-                  max={1920}
+                  max={screenWidth}
                   step={10}
                   value={p.x}
                   onChange={(e) => patch(p.id, { x: Math.max(0, Number(e.target.value)) })}
@@ -107,7 +116,7 @@ export function OverlayLayoutEditor({ positions, onPositionChange }: Props) {
                 <input
                   type="number"
                   min={0}
-                  max={1080}
+                  max={screenHeight}
                   step={10}
                   value={p.y}
                   onChange={(e) => patch(p.id, { y: Math.max(0, Number(e.target.value)) })}

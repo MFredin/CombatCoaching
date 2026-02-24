@@ -1,0 +1,30 @@
+﻿# Arcane Mage -- spec profile
+
+[spec]
+class       = "MAGE"
+spec        = "Arcane"
+role        = "DAMAGER"
+description = "Arcane Mage Arcane Surge burst window and Arcane Charge management."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    12042,  # Arcane Power           (legacy burst CD ID)
+    110959, # Alter Time             (rewind CD, 1 min CD)
+    365350, # Arcane Surge           (primary burst CD, 3 min CD)
+    157980, # Supernova              (talented AoE CD)
+    235450, # Prismatic Barrier      (absorb shield, 25s CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    235450, # Prismatic Barrier      (absorb shield)
+    55342,  # Mirror Image           (threat / minor DR)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    30451,  # Arcane Blast           (primary builder; charges stacking)
+    8437,   # Arcane Barrage         (charge dump)
+    7268,   # Arcane Missiles        (Clearcasting proc)
+    44425,  # Arcane Barrage         (alternate ID)
+]

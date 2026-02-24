@@ -1,0 +1,30 @@
+﻿# Survival Hunter -- spec profile
+
+[spec]
+class       = "HUNTER"
+spec        = "Survival"
+role        = "DAMAGER"
+description = "Survival Hunter melee-range Coordinated Assault and Mongoose Bite tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    266779, # Coordinated Assault    (primary burst CD, 2 min CD)
+    259387, # Mongoose Bite          (primary Focus spender stack)
+    281195, # Aspect of the Eagle    (ranged phase CD)
+    259491, # Flanking Strike        (pet + player combo attack)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    186265, # Aspect of the Turtle   (100% dodge channel, 3 min CD)
+    109304, # Exhilaration           (self-heal, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    259491, # Flanking Strike        (Focus generator with pet)
+    271788, # Serpent Sting          (DoT applicator)
+    259391, # Mongoose Bite          (Focus spender)
+    212436, # Butchery               (talented AoE finisher)
+    217200, # Carve                  (AoE filler)
+]

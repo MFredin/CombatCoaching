@@ -1,0 +1,30 @@
+﻿# Frost Death Knight -- spec profile
+
+[spec]
+class       = "DEATH_KNIGHT"
+spec        = "Frost"
+role        = "DAMAGER"
+description = "Frost Death Knight burst windows and major cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    47568,  # Empower Rune Weapon    (rune + RP refund, 2 min CD)
+    51271,  # Pillar of Frost        (primary damage CD, 1 min CD)
+    48792,  # Icebound Fortitude     (20% DR, 3 min CD)
+    152279, # Breath of Sindragosa   (talented channel CD)
+    279302, # Frostwyrm's Fury       (talented AoE CD)
+    207127, # Hungering Cold         (talented CC/burst)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    48792,  # Icebound Fortitude
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    49143,  # Frost Strike           (RP spender)
+    49184,  # Howling Blast          (rune spender / AoE)
+    222024, # Frostscythe            (talented AoE)
+    85001,  # Killing Machine proc   (proc tracker)
+]

@@ -1,0 +1,31 @@
+﻿# Subtlety Rogue -- spec profile
+
+[spec]
+class       = "ROGUE"
+spec        = "Subtlety"
+role        = "DAMAGER"
+description = "Subtlety Rogue Shadow Dance burst windows and Shadow Power management."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    121471, # Shadow Blades          (energy/combo point CD, 3 min CD)
+    277925, # Shadow Dance           (primary burst enabler, 60s CD)
+    280719, # Secret Technique       (talented finisher CD)
+    31224,  # Cloak of Shadows       (magic immunity, 1 min CD)
+    185313, # Shadow Dance           (alternate ID variant)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    31224,  # Cloak of Shadows       (magic immunity)
+    5277,   # Evasion                (50% dodge, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    185438, # Shadowstrike           (primary Shadow Dance builder)
+    197835, # Symbols of Death       (combo point + Shadow buff, 30s CD)
+    200758, # Backstab               (out-of-Dance builder)
+    315332, # Eviscerate             (primary finisher)
+    277925, # Shadow Dance           (burst enabler)
+]

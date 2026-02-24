@@ -1,0 +1,33 @@
+﻿# Blood Death Knight -- spec profile
+
+[spec]
+class       = "DEATH_KNIGHT"
+spec        = "Blood"
+role        = "TANK"
+description = "Blood Death Knight survivability and major cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    55233,  # Vampiric Blood         (significant DR + healing, 1.5 min CD)
+    49028,  # Dancing Rune Weapon    (parry + rune gen, 2 min CD)
+    48792,  # Icebound Fortitude     (20% DR, 3 min CD)
+    43265,  # Death and Decay        (AoE snap threat + Bone Shield gen)
+    194844, # Bonestorm              (talented AoE damage + healing)
+    51052,  # Anti-Magic Zone        (party AMZ, 2 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    55233,  # Vampiric Blood
+    49028,  # Dancing Rune Weapon
+    48792,  # Icebound Fortitude
+    77535,  # Blood Shield
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    49998,  # Death Strike           (primary AM spender)
+    49184,  # Howling Blast          (AoE rune dump)
+    43265,  # Death and Decay
+    195292, # Death's Caress         (ranged application)
+]

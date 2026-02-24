@@ -1,0 +1,31 @@
+﻿# Balance Druid -- spec profile
+
+[spec]
+class       = "DRUID"
+spec        = "Balance"
+role        = "DAMAGER"
+description = "Balance Druid Celestial Alignment burst and Astral Power tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    194223, # Celestial Alignment    (primary burst CD, 3 min CD)
+    323764, # Convoke the Spirits    (talented channel CD, 2 min CD)
+    191034, # Starfall               (AoE Astral Power spender)
+    1076,   # Tranquility            (off-spec emergency heal)
+    102352, # Cenarion Ward          (talented HoT CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    22812,  # Barkskin               (12% DR, 1 min CD)
+    61336,  # Survival Instincts     (50% DR, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    190984, # Solar Wrath            (primary filler in Solar Eclipse)
+    194153, # Starfire               (primary filler in Lunar Eclipse)
+    78674,  # Starsurge              (ST Astral Power spender)
+    191034, # Starfall               (AoE Astral Power spender)
+    202347, # Stellar Flare          (talented DoT)
+]

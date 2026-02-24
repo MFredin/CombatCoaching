@@ -1,0 +1,32 @@
+﻿# Brewmaster Monk -- spec profile
+
+[spec]
+class       = "MONK"
+spec        = "Brewmaster"
+role        = "TANK"
+description = "Brewmaster Monk stagger management and Fortifying Brew cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    115203, # Fortifying Brew        (primary DR CD, 6 min CD)
+    122278, # Dampen Harm            (talented large-hit reduction)
+    120954, # Fortifying Brew        (alternate ID variant)
+    119582, # Purifying Brew         (stagger cleanse, 1 charge)
+    132578, # Invoke Niuzao the Black Ox (talented tank CD, 3 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    115203, # Fortifying Brew
+    122278, # Dampen Harm
+    122783, # Diffuse Magic          (magical DR, 1.5 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    100780, # Keg Smash              (primary Chi generator + slow)
+    107270, # Spinning Crane Kick    (AoE filler)
+    115181, # Breath of Fire         (AoE damage + Purified Brew)
+    115307, # Ironskin Brew          (primary AM — stagger increase)
+    116705, # Spear Hand Strike      (interrupt)
+]

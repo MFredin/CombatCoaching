@@ -1,0 +1,35 @@
+﻿# Protection Paladin -- spec profile
+
+[spec]
+class       = "PALADIN"
+spec        = "Protection"
+role        = "TANK"
+description = "Protection Paladin Shield of the Righteous uptime and Guardian of Ancient Kings tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    86659,  # Guardian of Ancient Kings (primary tank CD, 5 min CD)
+    31884,  # Avenging Wrath         (secondary burst / healing CD)
+    642,    # Divine Shield          (personal immunity, 5 min CD)
+    498,    # Divine Protection      (20% DR, 1 min CD)
+    31821,  # Aura Mastery           (raid DR CD, 3 min CD)
+    105809, # Holy Avenger           (talented Holy Power CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    86659,  # Guardian of Ancient Kings
+    642,    # Divine Shield
+    498,    # Divine Protection
+    184662, # Shield of Vengeance    (absorb + reflect)
+    53600,  # Shield of the Righteous (primary block CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    35395,  # Crusader Strike        (primary Holy Power generator)
+    20271,  # Judgment               (Holy Power generator + debuff)
+    53600,  # Shield of the Righteous (primary AM spender)
+    53385,  # Divine Storm           (AoE Holy Power spender)
+    633,    # Lay on Hands           (emergency full heal, 10 min CD)
+]

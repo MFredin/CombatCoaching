@@ -1,0 +1,34 @@
+﻿# Holy Paladin -- spec profile
+
+[spec]
+class       = "PALADIN"
+spec        = "Holy"
+role        = "HEALER"
+description = "Holy Paladin Avenging Wrath and Aura Mastery raid cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    31842,  # Avenging Wrath: Might  (primary healing CD, 2 min CD)
+    216331, # Avenging Crusader      (talented melee-heal CD)
+    105809, # Holy Avenger           (talented Holy Power CD)
+    114165, # Holy Prism             (talented smart AoE heal)
+    642,    # Divine Shield          (personal immunity, 5 min CD)
+    31821,  # Aura Mastery           (raid DR CD, 3 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    642,    # Divine Shield          (personal immunity)
+    498,    # Divine Protection      (20% DR, 1 min CD)
+    184662, # Shield of Vengeance    (absorb + reflect)
+    86659,  # Guardian of Ancient Kings (AoE DR aura)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    82326,  # Holy Light             (efficient single-target heal)
+    85222,  # Light of Dawn          (Holy Power AoE heal)
+    2812,   # Holy Radiance          (AoE heal)
+    53563,  # Beacon of Light        (passive transfer)
+    20473,  # Holy Shock             (instant generator / heal, 7.5s CD)
+]

@@ -1,0 +1,31 @@
+﻿# Devastation Evoker -- spec profile
+
+[spec]
+class       = "EVOKER"
+spec        = "Devastation"
+role        = "DAMAGER"
+description = "Devastation Evoker Dragonrage burst window and empowered spell tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    375087, # Dragonrage             (primary burst CD, 2 min CD)
+    357210, # Deep Breath            (AoE damage CD, 1.5 min CD)
+    382411, # Eternity Surge         (ST empowered CD)
+    385578, # Shattering Star        (debuff + burst CD)
+    370553, # Tip the Scales         (instant empower cast)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    363916, # Obsidian Scales        (primary DR CD)
+    374348, # Renewing Blaze         (self-heal CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    357208, # Fire Breath            (empowered DoT)
+    382266, # Unravel                (absorb destroyer)
+    361469, # Pyre                   (AoE Essence spender)
+    359073, # Disintegrate           (ST Essence channel)
+    382731, # Eternity Surge         (empowered ST CD)
+]

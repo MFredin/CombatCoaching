@@ -1,0 +1,31 @@
+﻿# Destruction Warlock -- spec profile
+
+[spec]
+class       = "WARLOCK"
+spec        = "Destruction"
+role        = "DAMAGER"
+description = "Destruction Warlock Summon Infernal burst and Chaos Bolt tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    1122,   # Summon Infernal        (primary burst CD, 3 min CD)
+    113858, # Dark Soul: Instability (haste CD, 2 min CD)
+    196447, # Channel Demonfire      (talented AoE channel)
+    264130, # Decimating Bolt        (talented execute CD)
+    152108, # Cataclysm              (talented AoE applicator)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    104773, # Unending Resolve       (40% DR, 3 min CD)
+    108416, # Dark Pact              (self-absorb from pet, 1 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    17962,  # Conflagrate            (primary instant + Backdraft proc)
+    29722,  # Incinerate             (primary filler / Ember gen)
+    116858, # Chaos Bolt             (primary Soul Shard spender)
+    348,    # Immolate               (DoT + Ember gen)
+    196447, # Channel Demonfire      (talented AoE channel)
+]

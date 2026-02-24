@@ -1,0 +1,31 @@
+﻿# Frost Mage -- spec profile
+
+[spec]
+class       = "MAGE"
+spec        = "Frost"
+role        = "DAMAGER"
+description = "Frost Mage Icy Veins burst window and Shatter combo tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    12472,  # Icy Veins              (primary haste CD, 3 min CD)
+    55342,  # Mirror Image           (threat / minor DR)
+    235450, # Prismatic Barrier      (absorb shield, 25s CD)
+    84714,  # Frozen Orb             (AoE CD + chill applicator)
+    153596, # Comet Storm            (talented AoE CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    235450, # Prismatic Barrier      (absorb shield)
+    55342,  # Mirror Image           (threat / minor DR)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    116,    # Frostbolt              (primary builder + chill)
+    228597, # Flurry                 (Brain Freeze proc / freeze setup)
+    30455,  # Ice Lance              (Shatter spender vs Frozen target)
+    120,    # Cone of Cold           (AoE chill / Shatter)
+    84714,  # Frozen Orb             (AoE CD + chill applicator)
+]

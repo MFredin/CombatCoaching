@@ -1,0 +1,32 @@
+﻿# Shadow Priest -- spec profile
+
+[spec]
+class       = "PRIEST"
+spec        = "Shadow"
+role        = "DAMAGER"
+description = "Shadow Priest Void Eruption burst window and DoT management tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    228260, # Void Eruption          (enter Voidform, primary burst CD)
+    47585,  # Dispersion             (90% DR channel, 2 min CD)
+    205351, # Unending Resolve       (25% DR, 3 min CD)
+    322433, # Mindgames              (talented reverse-damage)
+    341374, # Unfurling Darkness     (talented instant VT)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    47585,  # Dispersion             (90% DR channel)
+    586,    # Fade                   (threat drop)
+    19236,  # Desperate Prayer       (self-heal, 1.5 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    589,    # Shadow Word: Pain      (primary DoT)
+    34914,  # Vampiric Touch         (primary DoT + mana)
+    8092,   # Mind Blast             (primary Insanity generator)
+    15407,  # Mind Flay              (filler Insanity channel)
+    263165, # Void Torrent           (talented Insanity channel)
+]

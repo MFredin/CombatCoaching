@@ -1,0 +1,31 @@
+﻿# Restoration Druid -- spec profile
+
+[spec]
+class       = "DRUID"
+spec        = "Restoration"
+role        = "HEALER"
+description = "Restoration Druid HoT management and Tranquility raid cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    740,    # Tranquility            (major raid heal CD, 3 min CD)
+    33891,  # Tree of Life           (talented healing CD, 3 min CD)
+    102342, # Ironbark               (external DR, 1.5 min CD)
+    323764, # Convoke the Spirits    (talented channel CD, 2 min CD)
+    197721, # Flourish               (talented HoT extension)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    22812,  # Barkskin               (12% DR, 1 min CD)
+    61336,  # Survival Instincts     (50% DR, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    774,    # Rejuvenation           (primary HoT)
+    8936,   # Regrowth               (direct heal + HoT)
+    18562,  # Swiftmend              (instant heal, 15s CD)
+    48438,  # Wild Growth            (AoE HoT, 10s CD)
+    102351, # Cenarion Ward          (talented absorb HoT)
+]

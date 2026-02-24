@@ -417,6 +417,67 @@ pub fn apply_spec(app_handle: tauri::AppHandle, spec_key: String) -> Result<AppC
     Ok(cfg)
 }
 
+// ---------------------------------------------------------------------------
+// Addon SavedVariables auto-detection
+// ---------------------------------------------------------------------------
+
+/// Scan the WTF directory for the CombatCoach.lua SavedVariables file.
+///
+/// WTF SavedVariables path:
+///   <WoW root>/<flavor>/WTF/Account/<ACCOUNT>/SavedVariables/CombatCoach.lua
+///
+/// `logs_dir` is the Logs directory (same as `wow_log_path` in AppConfig).
+/// Returns the path to the first `CombatCoach.lua` found, or `None`.
+pub fn detect_addon_sv_path(logs_dir: &Path) -> Option<PathBuf> {
+    // logs_dir is typically: ../_retail_/Logs
+    // Parent is: ../_retail_  →  WTF is at ../_retail_/WTF
+    let parent = logs_dir.parent()?;
+    let account_root = parent.join("WTF").join("Account");
+
+    if !account_root.is_dir() {
+        return None;
+    }
+
+    // Iterate account folders (numeric Battle.net IDs or legacy names)
+    for account_entry in std::fs::read_dir(&account_root).ok()?.flatten() {
+        if !account_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+
+        // Check <ACCOUNT>/SavedVariables/CombatCoach.lua
+        let sv_path = account_entry
+            .path()
+            .join("SavedVariables")
+            .join("CombatCoach.lua");
+
+        if sv_path.is_file() {
+            tracing::info!("Auto-detected addon SV path: {:?}", sv_path);
+            return Some(sv_path);
+        }
+    }
+
+    None
+}
+
+/// Tauri command: auto-detect the CombatCoach.lua path from the configured
+/// Logs directory.  Returns the detected path as a string, or null if not found.
+#[tauri::command]
+pub fn auto_detect_addon_path(app_handle: tauri::AppHandle) -> Option<String> {
+    let dir = match app_handle.path().app_config_dir() {
+        Ok(d) => d,
+        Err(_) => return None,
+    };
+    let cfg = match load_or_default(&dir) {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
+    if cfg.wow_log_path.as_os_str().is_empty() {
+        return None;
+    }
+    detect_addon_sv_path(&cfg.wow_log_path)
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 /// Try to auto-detect the WoW Logs directory from common install locations.
 /// Returns the **directory** path (not a specific file) so the tailer can
 /// track whichever WoWCombatLog*.txt file is newest.

@@ -1,0 +1,31 @@
+﻿# Preservation Evoker -- spec profile
+
+[spec]
+class       = "EVOKER"
+spec        = "Preservation"
+role        = "HEALER"
+description = "Preservation Evoker empowered heal and Rewind major cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    370537, # Reversion              (HoT CD)
+    374227, # Stasis                 (spell store CD, 1.5 min CD)
+    363534, # Rewind                 (major time-reverse heal, 4 min CD)
+    370553, # Tip the Scales         (instant empower cast)
+    359816, # Dream Flight           (AoE HoT flyover, 2 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    363916, # Obsidian Scales        (primary DR CD)
+    374348, # Renewing Blaze         (self-heal CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    361469, # Emerald Blossom        (AoE instant heal)
+    365585, # Reversion              (HoT filler)
+    374251, # Echo                   (heal echo applicator)
+    364343, # Spiritbloom            (empowered ST heal)
+    355936, # Dream Breath           (empowered AoE HoT)
+]

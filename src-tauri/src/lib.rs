@@ -119,6 +119,10 @@ pub fn run() {
             in_combat: false, interrupt_count: 0, encounter_name: None,
         }))
         .manage(Mutex::new(std::collections::VecDeque::<engine::AdviceEvent>::new()))
+        // Event log ring buffer — filled by ipc::run; drained by drain_event_log command.
+        // Uses a newtype wrapper (EventLogQueue) so it doesn't conflict with the advice queue
+        // — both are VecDeque<String> internally but registered under different types.
+        .manage(Mutex::new(ipc::EventLogQueue::new()))
         // Config hot-update sender — None until try_start_pipeline() creates the channel.
         // save_config() uses this to push AppConfig changes to the running engine so
         // player_focus / selected_spec changes take effect without restarting the pipeline.
@@ -227,8 +231,11 @@ pub fn run() {
             get_connection_status,
             get_state_snapshot,
             drain_advice_queue,
+            drain_event_log,
+            get_screen_size,
             log_frontend_error,
             config::detect_wow_path,
+            config::auto_detect_addon_path,
             config::list_wtf_characters,
             config::list_specs,
             config::apply_spec,
@@ -273,6 +280,16 @@ fn try_start_pipeline(app: &tauri::AppHandle) {
     if ready.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
         tracing::info!("try_start_pipeline: pipeline already running — skipping");
         return;
+    }
+
+    // Auto-detect addon SavedVariables path if not already configured.
+    // The WTF tree and SavedVariables are beside the Logs dir so detection is cheap.
+    if cfg.addon_sv_path.as_os_str().is_empty() {
+        if let Some(sv_path) = config::detect_addon_sv_path(&cfg.wow_log_path) {
+            tracing::info!("try_start_pipeline: auto-detected addon_sv_path: {:?}", sv_path);
+            cfg.addon_sv_path = sv_path;
+            let _ = config::save(&cfg, &config_dir);
+        }
     }
 
     // Auto-populate player_focus from WTF directory if not yet configured and
@@ -406,6 +423,45 @@ fn drain_advice_queue(app: tauri::AppHandle) -> Vec<engine::AdviceEvent> {
         .unwrap_or_default()
 }
 
+/// Drain and return all pending event log entries from the managed ring buffer.
+/// `ipc::run` pushes formatted event strings here (cap 200); this call atomically takes them all.
+/// Polled by the frontend every 500 ms via invoke("drain_event_log").
+#[tauri::command]
+fn drain_event_log(app: tauri::AppHandle) -> Vec<String> {
+    app.state::<Mutex<ipc::EventLogQueue>>()
+        .lock()
+        .map(|mut q| q.drain())
+        .unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
+// get_screen_size — returns the actual dimensions of the overlay window so
+// the layout editor can use the correct maxima instead of hardcoded 1920×1080.
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+pub struct ScreenSize {
+    pub width:  u32,
+    pub height: u32,
+}
+
+/// Return the physical pixel size of the overlay window.
+/// The layout editor uses this to set the correct X/Y maxima and canvas scale.
+#[tauri::command]
+fn get_screen_size(app: tauri::AppHandle) -> ScreenSize {
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        if let Ok(Some(monitor)) = overlay.current_monitor() {
+            let size = monitor.size();
+            return ScreenSize { width: size.width, height: size.height };
+        }
+        // Fallback: use the window's own outer size
+        if let Ok(size) = overlay.outer_size() {
+            return ScreenSize { width: size.width, height: size.height };
+        }
+    }
+    ScreenSize { width: 1920, height: 1080 }
+}
+
 // ---------------------------------------------------------------------------
 // save_config — wraps config::save + try_start_pipeline so the pipeline
 // starts automatically the first time the user sets their WoW log path,
@@ -415,9 +471,24 @@ fn drain_advice_queue(app: tauri::AppHandle) -> Vec<engine::AdviceEvent> {
 /// Save the settings config to disk, then attempt to start the pipeline.
 /// Replaces `config::save_config` in the invoke_handler so try_start_pipeline
 /// is always called after a successful save.
+///
+/// Also auto-detects `addon_sv_path` if it is currently empty and the WoW
+/// Logs path is configured — avoids requiring the user to manually browse for
+/// the CombatCoach.lua file.
 #[tauri::command]
-fn save_config(app: tauri::AppHandle, config: config::AppConfig) -> Result<(), String> {
+fn save_config(app: tauri::AppHandle, mut config: config::AppConfig) -> Result<(), String> {
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+
+    // Auto-detect addon SavedVariables path if not yet configured.
+    if config.addon_sv_path.as_os_str().is_empty()
+        && !config.wow_log_path.as_os_str().is_empty()
+    {
+        if let Some(sv_path) = config::detect_addon_sv_path(&config.wow_log_path) {
+            tracing::info!("save_config: auto-detected addon_sv_path: {:?}", sv_path);
+            config.addon_sv_path = sv_path;
+        }
+    }
+
     config::save(&config, &dir).map_err(|e| e.to_string())?;
     try_start_pipeline(&app);
     // Push the new config to the running engine for live GUID/spec updates.

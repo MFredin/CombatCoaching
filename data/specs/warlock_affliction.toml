@@ -1,0 +1,31 @@
+﻿# Affliction Warlock -- spec profile
+
+[spec]
+class       = "WARLOCK"
+spec        = "Affliction"
+role        = "DAMAGER"
+description = "Affliction Warlock Summon Darkglare burst and multi-DoT management."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    205180, # Summon Darkglare       (primary burst CD, 3 min CD)
+    152108, # Cataclysm              (talented AoE DoT applicator)
+    316099, # Soul Rot               (talented AoE burst CD)
+    196098, # Dark Soul: Misery      (haste CD, 2 min CD)
+    48181,  # Haunt                  (talented damage amp CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    104773, # Unending Resolve       (40% DR, 3 min CD)
+    108416, # Dark Pact              (self-absorb from pet, 1 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    172,    # Corruption             (primary DoT)
+    980,    # Agony                  (primary DoT + Shard gen)
+    316099, # Soul Rot               (talented AoE CD)
+    48181,  # Haunt                  (talented damage amp)
+    146739, # Malefic Rapture        (Soul Shard spender)
+]

@@ -1,0 +1,31 @@
+﻿# Fire Mage -- spec profile
+
+[spec]
+class       = "MAGE"
+spec        = "Fire"
+role        = "DAMAGER"
+description = "Fire Mage Combustion burst window and Hot Streak proc tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    190319, # Combustion             (primary burst CD, 2 min CD)
+    55342,  # Mirror Image           (threat / minor DR)
+    235450, # Prismatic Barrier      (absorb shield, 25s CD)
+    321507, # Shifting Power         (talented CD reduction channel)
+    153561, # Meteor                 (talented AoE CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    235450, # Prismatic Barrier      (absorb shield)
+    55342,  # Mirror Image           (threat / minor DR)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    133,    # Fireball               (primary builder)
+    11366,  # Pyroblast              (Hot Streak instant / filler)
+    108853, # Fire Blast             (instant Hot Streak charger)
+    257541, # Phoenix Flames         (guaranteed crit charger, 3 charges)
+    2120,   # Flamestrike            (AoE Hot Streak spender)
+]

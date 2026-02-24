@@ -1,0 +1,31 @@
+﻿# Marksmanship Hunter -- spec profile
+
+[spec]
+class       = "HUNTER"
+spec        = "Marksmanship"
+role        = "DAMAGER"
+description = "Marksmanship Hunter Trueshot burst window and Aimed Shot tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    288613, # Trueshot               (primary burst CD, 1.5 min CD)
+    257620, # Rapid Fire             (channel burst, 20s CD)
+    321538, # Volley                 (talented AoE CD)
+    260402, # Double Tap             (talented Aimed Shot enhancer)
+    186387, # Bursting Shot          (knockback / interrupt)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    186265, # Aspect of the Turtle   (100% dodge channel, 3 min CD)
+    109304, # Exhilaration           (self-heal, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    19434,  # Aimed Shot             (primary Focus spender)
+    185358, # Arcane Shot            (Focus spender filler)
+    257620, # Rapid Fire             (channel burst, 20s CD)
+    56641,  # Steady Shot            (Precise Shots proc / filler)
+    217200, # Barrage                (AoE channel filler)
+]

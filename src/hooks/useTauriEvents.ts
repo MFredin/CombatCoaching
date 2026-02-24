@@ -31,6 +31,8 @@ export interface TauriEventHandlers {
   onConnection?:    (status: ConnectionStatus) => void;
   onIdentity?:      (identity: PlayerIdentity) => void;
   onDebrief?:       (debrief: PullDebrief)     => void;
+  /** Called with a batch of new event log entries (e.g. "12:34:56 ⚠️ GCD Gap"). */
+  onEventLog?:      (entries: string[])        => void;
 }
 
 export function useTauriEvents(handlers: TauriEventHandlers): void {
@@ -82,6 +84,23 @@ export function useTauriEvents(handlers: TauriEventHandlers): void {
         try {
           const events = await invoke<AdviceEvent[]>("drain_advice_queue");
           events.forEach(e => ref.current.onAdvice?.(e));
+        } catch {
+          // Backend not ready or shutting down — ignore
+        }
+      };
+      poll(); // immediate sync on mount
+      intervals.push(setInterval(poll, 500));
+    }
+
+    // ── Event log drain ──────────────────────────────────────────────────────
+    // Polled every 500 ms — drains the event log ring buffer (connection changes,
+    // combat transitions, encounter start/end, advice events).
+    // Displayed in the Event Feed sub-tab of the Live Feed panel.
+    if (handlers.onEventLog) {
+      const poll = async () => {
+        try {
+          const entries = await invoke<string[]>("drain_event_log");
+          if (entries.length > 0) ref.current.onEventLog?.(entries);
         } catch {
           // Backend not ready or shutting down — ignore
         }

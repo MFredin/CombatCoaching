@@ -1,0 +1,31 @@
+﻿# Unholy Death Knight -- spec profile
+
+[spec]
+class       = "DEATH_KNIGHT"
+spec        = "Unholy"
+role        = "DAMAGER"
+description = "Unholy Death Knight pet and disease management with major cooldowns."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    42650,  # Army of the Dead       (major ramp CD, 8 min CD)
+    63560,  # Dark Transformation    (empowers Ghoul, 1 min CD)
+    275699, # Apocalypse             (Festering Wound burst, 1.5 min CD)
+    207127, # Hungering Cold         (talented CC/burst)
+    48792,  # Icebound Fortitude     (20% DR, 3 min CD)
+    220143, # Unholy Assault         (talented damage CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    48792,  # Icebound Fortitude
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    47541,  # Death Coil             (RP spender / Ghoul feed)
+    43265,  # Death and Decay        (AoE rune dump)
+    91797,  # Unholy Frenzy          (Festering Wound generator)
+    194310, # Festering Strike       (Festering Wound stacker)
+    115989, # Festering Wound burst  (proc detonation)
+]

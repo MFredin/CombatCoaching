@@ -1,0 +1,32 @@
+﻿# Discipline Priest -- spec profile
+
+[spec]
+class       = "PRIEST"
+spec        = "Discipline"
+role        = "HEALER"
+description = "Discipline Priest Rapture and Power Word: Barrier raid cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    47536,  # Rapture                (PW:S cost/CD reset, 1.5 min CD)
+    33206,  # Pain Suppression       (external 40% DR, 3 min CD)
+    62618,  # Power Word: Barrier    (raid absorb dome, 3 min CD)
+    246287, # Evangelism             (atonement extension, 1.5 min CD)
+    289275, # Luminous Barrier       (talented group absorb)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    33206,  # Pain Suppression       (external DR)
+    586,    # Fade                   (threat drop / DR talent)
+    19236,  # Desperate Prayer       (self-heal, 1.5 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    17,     # Power Word: Shield     (primary absorb applicator)
+    585,    # Smite                  (atonement filler)
+    8092,   # Mind Blast             (Atonement + Schism)
+    527,    # Purify                 (dispel)
+    194509, # Power Word: Radiance   (AoE atonement applicator)
+]

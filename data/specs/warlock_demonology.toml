@@ -1,0 +1,30 @@
+﻿# Demonology Warlock -- spec profile
+
+[spec]
+class       = "WARLOCK"
+spec        = "Demonology"
+role        = "DAMAGER"
+description = "Demonology Warlock Summon Demonic Tyrant ramp and demon summoning tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    265187, # Summon Demonic Tyrant  (primary extend-demon CD, 1.5 min CD)
+    104316, # Call Dreadstalkers     (primary demon summon, 20s CD)
+    111898, # Grimoire: Felguard     (talented extra Felguard, 2 min CD)
+    322226, # Impending Catastrophe  (talented AoE CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    104773, # Unending Resolve       (40% DR, 3 min CD)
+    108416, # Dark Pact              (self-absorb from pet, 1 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    264057, # Call Dreadstalkers     (primary demon summon)
+    264173, # Demonbolt              (Soul Shard spender)
+    196277, # Implosion              (AoE Soul Shard spender)
+    5740,   # Rain of Fire           (AoE filler)
+    89751,  # Felstorm               (Felguard ability)
+]

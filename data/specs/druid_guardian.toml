@@ -1,0 +1,32 @@
+﻿# Guardian Druid -- spec profile
+
+[spec]
+class       = "DRUID"
+spec        = "Guardian"
+role        = "TANK"
+description = "Guardian Druid Ironfur uptime and major defensive cooldown tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    61336,  # Survival Instincts     (50% DR, 2 min CD)
+    22842,  # Frenzied Regeneration  (self-heal, 1 min CD)
+    102558, # Incarnation: Guardian of Ursoc (talented 3 min CD)
+    323764, # Convoke the Spirits    (talented channel CD, 2 min CD)
+    204066, # Lunar Beam             (talented AoE heal + damage)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    22842,  # Frenzied Regeneration
+    61336,  # Survival Instincts
+    22812,  # Barkskin               (12% DR, 1 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    33917,  # Mangle                 (primary rage generator)
+    77758,  # Thrash                 (AoE bleed application)
+    77731,  # Swipe                  (rage dump AoE)
+    213764, # Swipe                  (Bear Form variant)
+    192081, # Ironfur                (primary AM — armor stack)
+]

@@ -1,0 +1,32 @@
+﻿# Assassination Rogue -- spec profile
+
+[spec]
+class       = "ROGUE"
+spec        = "Assassination"
+role        = "DAMAGER"
+description = "Assassination Rogue Deathmark burst window and poison DoT management."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    79140,  # Vendetta               (legacy target debuff CD)
+    360194, # Deathmark              (primary burst CD, 1.5 min CD)
+    121471, # Shadow Blades          (energy/combo point CD)
+    185311, # Exsanguinate           (talented bleed accelerator)
+    31224,  # Cloak of Shadows       (magic immunity, 1 min CD)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    31224,  # Cloak of Shadows       (magic immunity)
+    5277,   # Evasion                (50% dodge, 2 min CD)
+    1766,   # Kick                   (interrupt)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    703,    # Garrote                (primary opener bleed)
+    8676,   # Ambush                 (Stealth opener)
+    1329,   # Mutilate               (primary combo point builder)
+    2098,   # Dispatch               (execute finisher)
+    315496, # Slice and Dice         (haste buff finisher)
+]

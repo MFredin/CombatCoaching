@@ -10,16 +10,88 @@
 use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
-// Embedded TOML data
+// Embedded TOML data — one const per spec, alphabetical by file name
 // ---------------------------------------------------------------------------
 
-const PALADIN_RETRIBUTION: &str = include_str!("../../data/specs/paladin_retribution.toml");
-const PRIEST_HOLY:         &str = include_str!("../../data/specs/priest_holy.toml");
-const WARRIOR_PROTECTION:  &str = include_str!("../../data/specs/warrior_protection.toml");
+const DEATH_KNIGHT_BLOOD:        &str = include_str!("../../data/specs/death_knight_blood.toml");
+const DEATH_KNIGHT_FROST:        &str = include_str!("../../data/specs/death_knight_frost.toml");
+const DEATH_KNIGHT_UNHOLY:       &str = include_str!("../../data/specs/death_knight_unholy.toml");
+const DEMON_HUNTER_HAVOC:        &str = include_str!("../../data/specs/demon_hunter_havoc.toml");
+const DEMON_HUNTER_VENGEANCE:    &str = include_str!("../../data/specs/demon_hunter_vengeance.toml");
+const DRUID_BALANCE:             &str = include_str!("../../data/specs/druid_balance.toml");
+const DRUID_FERAL:               &str = include_str!("../../data/specs/druid_feral.toml");
+const DRUID_GUARDIAN:            &str = include_str!("../../data/specs/druid_guardian.toml");
+const DRUID_RESTORATION:         &str = include_str!("../../data/specs/druid_restoration.toml");
+const EVOKER_AUGMENTATION:       &str = include_str!("../../data/specs/evoker_augmentation.toml");
+const EVOKER_DEVASTATION:        &str = include_str!("../../data/specs/evoker_devastation.toml");
+const EVOKER_PRESERVATION:       &str = include_str!("../../data/specs/evoker_preservation.toml");
+const HUNTER_BEAST_MASTERY:      &str = include_str!("../../data/specs/hunter_beast_mastery.toml");
+const HUNTER_MARKSMANSHIP:       &str = include_str!("../../data/specs/hunter_marksmanship.toml");
+const HUNTER_SURVIVAL:           &str = include_str!("../../data/specs/hunter_survival.toml");
+const MAGE_ARCANE:               &str = include_str!("../../data/specs/mage_arcane.toml");
+const MAGE_FIRE:                 &str = include_str!("../../data/specs/mage_fire.toml");
+const MAGE_FROST:                &str = include_str!("../../data/specs/mage_frost.toml");
+const MONK_BREWMASTER:           &str = include_str!("../../data/specs/monk_brewmaster.toml");
+const MONK_MISTWEAVER:           &str = include_str!("../../data/specs/monk_mistweaver.toml");
+const MONK_WINDWALKER:           &str = include_str!("../../data/specs/monk_windwalker.toml");
+const PALADIN_HOLY:              &str = include_str!("../../data/specs/paladin_holy.toml");
+const PALADIN_PROTECTION:        &str = include_str!("../../data/specs/paladin_protection.toml");
+const PALADIN_RETRIBUTION:       &str = include_str!("../../data/specs/paladin_retribution.toml");
+const PRIEST_DISCIPLINE:         &str = include_str!("../../data/specs/priest_discipline.toml");
+const PRIEST_HOLY:               &str = include_str!("../../data/specs/priest_holy.toml");
+const PRIEST_SHADOW:             &str = include_str!("../../data/specs/priest_shadow.toml");
+const ROGUE_ASSASSINATION:       &str = include_str!("../../data/specs/rogue_assassination.toml");
+const ROGUE_OUTLAW:              &str = include_str!("../../data/specs/rogue_outlaw.toml");
+const ROGUE_SUBTLETY:            &str = include_str!("../../data/specs/rogue_subtlety.toml");
+const SHAMAN_ELEMENTAL:          &str = include_str!("../../data/specs/shaman_elemental.toml");
+const SHAMAN_ENHANCEMENT:        &str = include_str!("../../data/specs/shaman_enhancement.toml");
+const SHAMAN_RESTORATION:        &str = include_str!("../../data/specs/shaman_restoration.toml");
+const WARLOCK_AFFLICTION:        &str = include_str!("../../data/specs/warlock_affliction.toml");
+const WARLOCK_DEMONOLOGY:        &str = include_str!("../../data/specs/warlock_demonology.toml");
+const WARLOCK_DESTRUCTION:       &str = include_str!("../../data/specs/warlock_destruction.toml");
+const WARRIOR_ARMS:              &str = include_str!("../../data/specs/warrior_arms.toml");
+const WARRIOR_FURY:              &str = include_str!("../../data/specs/warrior_fury.toml");
+const WARRIOR_PROTECTION:        &str = include_str!("../../data/specs/warrior_protection.toml");
 
 static ALL_SPEC_DATA: &[&str] = &[
+    DEATH_KNIGHT_BLOOD,
+    DEATH_KNIGHT_FROST,
+    DEATH_KNIGHT_UNHOLY,
+    DEMON_HUNTER_HAVOC,
+    DEMON_HUNTER_VENGEANCE,
+    DRUID_BALANCE,
+    DRUID_FERAL,
+    DRUID_GUARDIAN,
+    DRUID_RESTORATION,
+    EVOKER_AUGMENTATION,
+    EVOKER_DEVASTATION,
+    EVOKER_PRESERVATION,
+    HUNTER_BEAST_MASTERY,
+    HUNTER_MARKSMANSHIP,
+    HUNTER_SURVIVAL,
+    MAGE_ARCANE,
+    MAGE_FIRE,
+    MAGE_FROST,
+    MONK_BREWMASTER,
+    MONK_MISTWEAVER,
+    MONK_WINDWALKER,
+    PALADIN_HOLY,
+    PALADIN_PROTECTION,
     PALADIN_RETRIBUTION,
+    PRIEST_DISCIPLINE,
     PRIEST_HOLY,
+    PRIEST_SHADOW,
+    ROGUE_ASSASSINATION,
+    ROGUE_OUTLAW,
+    ROGUE_SUBTLETY,
+    SHAMAN_ELEMENTAL,
+    SHAMAN_ENHANCEMENT,
+    SHAMAN_RESTORATION,
+    WARLOCK_AFFLICTION,
+    WARLOCK_DEMONOLOGY,
+    WARLOCK_DESTRUCTION,
+    WARRIOR_ARMS,
+    WARRIOR_FURY,
     WARRIOR_PROTECTION,
 ];
 
@@ -159,13 +231,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lists_three_specs() {
+    fn lists_all_specs() {
         let specs = list_all();
-        assert_eq!(specs.len(), 3);
+        // 13 WoW classes × 3 specs each, except Demon Hunter (2) = 39 total
+        assert_eq!(specs.len(), 39);
+        // Spot-check a few across different classes
         let keys: Vec<&str> = specs.iter().map(|s| s.key.as_str()).collect();
         assert!(keys.contains(&"PALADIN/Retribution"));
         assert!(keys.contains(&"PRIEST/Holy"));
         assert!(keys.contains(&"WARRIOR/Protection"));
+        assert!(keys.contains(&"MAGE/Fire"));
+        assert!(keys.contains(&"DEATH_KNIGHT/Blood"));
+        assert!(keys.contains(&"HUNTER/Beast Mastery"));
     }
 
     #[test]
@@ -190,7 +267,8 @@ mod tests {
 
     #[test]
     fn returns_none_for_unknown() {
-        assert!(load_spec("MAGE", "Fire").is_none());
+        // "TINKER" is not a WoW class — no spec file will match
+        assert!(load_spec("TINKER", "Mechagnome").is_none());
     }
 
     #[test]

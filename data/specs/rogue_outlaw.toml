@@ -1,0 +1,31 @@
+﻿# Outlaw Rogue -- spec profile
+
+[spec]
+class       = "ROGUE"
+spec        = "Outlaw"
+role        = "DAMAGER"
+description = "Outlaw Rogue Adrenaline Rush burst and Roll the Bones buff tracking."
+
+[spec.cooldowns]
+major_cd_spell_ids = [
+    13877,  # Blade Flurry           (AoE cleave CD, 30s CD)
+    13750,  # Adrenaline Rush        (primary burst CD, 3 min CD)
+    271877, # Blade Rush             (talented gap closer + energy)
+    31224,  # Cloak of Shadows       (magic immunity, 1 min CD)
+    271900, # Keep it Rolling        (talented buff extension)
+]
+
+[spec.active_mitigation]
+am_spell_ids = [
+    31224,  # Cloak of Shadows       (magic immunity)
+    5277,   # Evasion                (50% dodge, 2 min CD)
+]
+
+[spec.rotation]
+primary_spell_ids = [
+    1752,   # Sinister Strike        (primary combo point builder)
+    315341, # Slice and Dice         (haste buff finisher)
+    196819, # Pistol Shot            (proc combo point builder)
+    315496, # Roll the Bones         (buff randomizer finisher)
+    2098,   # Dispatch               (execute finisher)
+]
